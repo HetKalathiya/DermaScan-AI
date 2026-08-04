@@ -1,5 +1,6 @@
 const { Server } = require('socket.io');
 const logger = require('../utils/logger');
+const chatSocket = require('./chat');
 
 let io;
 
@@ -21,6 +22,9 @@ const initSocket = (server) => {
       logger.info(`Socket disconnected: ${socket.id}`);
     });
   });
+
+  // Initialize chat namespace
+  chatSocket(io);
 
   return io;
 };

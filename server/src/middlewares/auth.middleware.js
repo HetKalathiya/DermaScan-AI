@@ -24,10 +24,16 @@ const protect = async (req, res, next) => {
 
 const doctor = (req, res, next) => {
   if (req.user && req.user.role === 'doctor') {
-    next();
-  } else {
-    return res.status(403).json({ success: false, message: 'Not authorized as a doctor' });
+    return next();
   }
+  return res.status(403).json({ success: false, message: 'Not authorized as a doctor' });
 };
 
-module.exports = { protect, doctor };
+const admin = (req, res, next) => {
+  if (req.user && req.user.role === 'admin') {
+    return next();
+  }
+  return res.status(403).json({ success: false, message: 'Not authorized as an admin' });
+};
+
+module.exports = { protect, doctor, admin };

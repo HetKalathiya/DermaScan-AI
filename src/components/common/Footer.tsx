@@ -1,7 +1,10 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Heart } from 'lucide-react';
 
 const Footer = () => {
+    const navigate = useNavigate();
+
     return (
         <footer className="bg-gray-900 border-t border-white/10 py-12">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -21,8 +24,9 @@ const Footer = () => {
                         <ul className="space-y-2 text-gray-400">
                             <li><a href="#" className="hover:text-cyan-400 transition-colors">Home</a></li>
                             <li><a href="#features" className="hover:text-cyan-400 transition-colors">Technology</a></li>
-                            <li><a href="#about" className="hover:text-cyan-400 transition-colors">About Us</a></li>
-                            <li><a href="#contact" className="hover:text-cyan-400 transition-colors">Contact</a></li>
+                            <li><button onClick={() => navigate('/doctor')} className="hover:text-cyan-400 transition-colors">For Doctors</button></li>
+                            <li><button onClick={() => navigate('/about')} className="hover:text-cyan-400 transition-colors">About Us</button></li>
+                            <li><button onClick={() => navigate('/login')} className="hover:text-cyan-400 transition-colors">Get Started</button></li>
                         </ul>
                     </div>
 

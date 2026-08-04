@@ -47,7 +47,10 @@ const Hero = () => {
                             Scan Now
                             <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                         </button>
-                        <button className="px-8 py-4 rounded-full text-lg font-semibold text-white border border-white/20 hover:bg-white/10 transition-colors backdrop-blur-sm">
+                        <button
+                            onClick={() => navigate('/about')}
+                            className="px-8 py-4 rounded-full text-lg font-semibold text-white border border-white/20 hover:bg-white/10 transition-colors backdrop-blur-sm"
+                        >
                             Learn More
                         </button>
                     </div>
@@ -59,13 +62,13 @@ const Hero = () => {
                         </div>
                         <div className="w-px h-10 bg-white/10" />
                         <div>
-                            <p className="text-2xl font-bold text-white">24/7</p>
-                            <p>Instant Analysis</p>
+                            <p className="text-2xl font-bold text-white">500+</p>
+                            <p>Verified Doctors</p>
                         </div>
                         <div className="w-px h-10 bg-white/10" />
                         <div>
-                            <p className="text-2xl font-bold text-white">10k+</p>
-                            <p>Users Trusted</p>
+                            <p className="text-2xl font-bold text-white">50K+</p>
+                            <p>Scans Analyzed</p>
                         </div>
                     </div>
                 </motion.div>

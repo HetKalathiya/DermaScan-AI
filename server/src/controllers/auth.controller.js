@@ -105,4 +105,64 @@ const login = async (req, res, next) => {
   }
 };
 
-module.exports = { register, registerDoctor, login };
+// Dedicated patient login — always enforces role === 'patient'
+const loginPatient = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      return res.status(401).json({ success: false, error: 'Invalid email or password.' });
+    }
+
+    if (user.role !== 'patient') {
+      return res.status(403).json({
+        success: false,
+        error: `This email is registered as a ${user.role} account. Please use the correct login page.`
+      });
+    }
+
+    res.json({
+      success: true,
+      auth: true,
+      message: 'Patient login successful',
+      token: generateToken(user._id),
+      user: { id: user._id, email: user.email, role: user.role, name: user.name },
+      data: { _id: user._id, email: user.email, role: user.role, token: generateToken(user._id) }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Dedicated doctor login — always enforces role === 'doctor'
+const loginDoctor = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      return res.status(401).json({ success: false, error: 'Invalid email or password.' });
+    }
+
+    if (user.role !== 'doctor') {
+      return res.status(403).json({
+        success: false,
+        error: `This email is registered as a ${user.role} account. Please use the correct login page.`
+      });
+    }
+
+    res.json({
+      success: true,
+      auth: true,
+      message: 'Doctor login successful',
+      token: generateToken(user._id),
+      user: { id: user._id, email: user.email, role: user.role, name: user.name },
+      data: { _id: user._id, email: user.email, role: user.role, token: generateToken(user._id) }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { register, registerDoctor, login, loginPatient, loginDoctor };

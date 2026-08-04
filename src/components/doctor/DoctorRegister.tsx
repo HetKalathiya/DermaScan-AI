@@ -241,6 +241,9 @@ const DoctorRegister = () => {
                             <div className="absolute inset-0 rounded-[32px] shadow-[inset_0_0_80px_rgba(255,255,255,0.02)] pointer-events-none" />
 
                             <div className="mb-10">
+                                <button onClick={() => navigate('/doctor')} className="text-xs text-[#818CF8] hover:text-white transition-colors font-semibold inline-flex items-center gap-1 mb-4">
+                                    ← Back to Doctor Portal
+                                </button>
                                 <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-2" style={{ fontFamily: "'Syne', sans-serif" }}>Doctor Registration</h2>
                                 <p className="text-slate-400 font-medium">Create your verified medical account.</p>
                             </div>

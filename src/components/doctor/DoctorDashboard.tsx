@@ -2,30 +2,44 @@ import React, { useState, useEffect } from 'react';
 import {
     ShieldCheck, LogOut, User, CheckCircle, Clock, Stethoscope,
     Bell, LayoutDashboard, Users, Activity, History, MessageSquare,
-    Settings, ZoomIn, Send, ChevronRight, ActivitySquare, BrainCircuit
+    Settings, ZoomIn, Send, ChevronRight, ActivitySquare, BrainCircuit, BarChart2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import ConsultationChat from '../common/ConsultationChat';
 
 interface Consultation {
-    id: number;
+    id: number | string;
+    _id?: string;
     patient_name: string;
     patient_email: string;
-    image_data: string; // Base64 or URL
-    status: 'pending' | 'completed' | 'pending_appointment';
+    patient_age?: number | null;
+    patient_gender?: string | null;
+    patient_phone?: string | null;
+    image_data: string;
+    status: 'pending' | 'completed' | 'pending_appointment' | 'active';
     diagnosis: string | null;
+    treatment?: string | null;
+    follow_up?: string | null;
     created_at: string;
+    // Structured AI fields from backend
+    ai_condition?: string;
+    ai_confidence?: number;
+    ai_result?: 'benign' | 'malignant' | 'pending' | 'unknown';
 }
 
 const DoctorDashboard = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [consultations, setConsultations] = useState<Consultation[]>([]);
     const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [selectedConsultation, setSelectedConsultation] = useState<Consultation | null>(null);
     const [diagnosis, setDiagnosis] = useState('');
     const [treatment, setTreatment] = useState('');
     const [followUp, setFollowUp] = useState('1 week');
-    const [user, setUser] = useState<{ name: string, email: string } | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [user, setUser] = useState<{ id?: string, _id?: string, name: string, email: string } | null>(null);
+    const [chatConsultation, setChatConsultation] = useState<Consultation | null>(null);
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -64,8 +78,7 @@ const DoctorDashboard = () => {
     };
 
     const handleLogout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        localStorage.clear();  // Fix: was only removing 'token' and 'user', now clears all session data
         navigate('/login');
     };
 
@@ -76,22 +89,24 @@ const DoctorDashboard = () => {
     };
 
     const handleSubmitDiagnosis = async () => {
-        if (!selectedConsultation) return;
-
+        if (!selectedConsultation || !diagnosis.trim()) return;
+        setIsSubmitting(true);
         try {
-            const fullDiagnosisText = `Diagnosis: ${diagnosis}\nTreatment: ${treatment}\nFollow-up: ${followUp}`;
             // @ts-ignore
             await import('../../services/api').then(module => module.default.put(`/doctor/consultations/${selectedConsultation.id}`, {
-                diagnosis: fullDiagnosisText,
+                diagnosis,
+                treatment,
+                follow_up: followUp,
                 status: 'completed'
             }));
-
             fetchConsultations();
             setSelectedConsultation(null);
             alert('Response sent successfully!');
         } catch (error) {
             console.error('Error submitting diagnosis:', error);
             alert('Failed to submit response');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -103,36 +118,40 @@ const DoctorDashboard = () => {
     };
     const stats = getStats();
 
-    // Helper to parse AI result from early diagnostic string if available
-    const extractAIInfo = (text: string | null) => {
-        let condition = "Unknown";
-        let confidence = "N/A";
-        let riskLevel = "low";
-        let riskColor = "text-green-400";
-        let barColor = "bg-green-400";
+    // Use structured AI fields from backend; fall back to regex parsing for old records
+    const extractAIInfo = (consult: Consultation) => {
+        let condition = consult.ai_condition || 'Unknown';
+        let confidence = consult.ai_confidence != null ? consult.ai_confidence : null;
+        let riskLevel = 'low';
+        let riskColor = 'text-green-400';
+        let barColor = 'from-green-400 to-emerald-500';
 
-        if (text && text.includes('AI Analysis:')) {
-            const match = text.match(/AI Analysis:\s*(.+?)\s*\((.+?)\)/);
+        // Fallback: parse old-format diagnosis string
+        if (condition === 'Unknown' || condition === '') {
+            const text = consult.diagnosis || '';
+            const match = text.match(/AI Analysis:\s*(.+?)\s*\((.+?)%\)/) ||
+                          text.match(/(.+?)\s*\((\d+)%\)/);
             if (match) {
-                condition = match[1];
-                confidence = match[2];
-                // mock risk
-                const num = parseInt(confidence);
-                if (condition.toLowerCase().includes('concern') || condition.toLowerCase().includes('melanoma')) {
-                    riskLevel = 'high';
-                    riskColor = 'text-red-400';
-                    barColor = 'from-red-500 to-orange-500';
-                } else if (num < 80) {
-                    riskLevel = 'medium';
-                    riskColor = 'text-yellow-400';
-                    barColor = 'from-yellow-500 to-orange-400';
-                } else {
-                    riskColor = 'text-[#00E5FF]';
-                    barColor = 'from-[#00E5FF] to-blue-500';
-                }
+                condition = match[1].trim();
+                confidence = parseInt(match[2]);
             }
         }
-        return { condition, confidence, riskLevel, riskColor, barColor };
+
+        const confidenceNum = confidence ?? 0;
+        const confidenceDisplay = confidenceNum > 0 ? `${confidenceNum}%` : 'N/A';
+
+        // Determine risk from ai_result field first
+        if (consult.ai_result === 'malignant' || condition.toLowerCase().includes('melanoma')) {
+            riskLevel = 'high'; riskColor = 'text-red-400'; barColor = 'from-red-500 to-orange-500';
+        } else if (consult.ai_result === 'benign') {
+            riskLevel = 'low'; riskColor = 'text-green-400'; barColor = 'from-green-400 to-emerald-500';
+        } else if (confidenceNum < 80) {
+            riskLevel = 'medium'; riskColor = 'text-yellow-400'; barColor = 'from-yellow-500 to-orange-400';
+        } else {
+            riskColor = 'text-[#00E5FF]'; barColor = 'from-[#00E5FF] to-blue-500';
+        }
+
+        return { condition, confidence: confidenceDisplay, confidenceNum, riskLevel, riskColor, barColor };
     };
 
     return (
@@ -155,21 +174,26 @@ const DoctorDashboard = () => {
                     </span>
                 </div>
 
+                {/* Fix: Analytics added, active state driven by current route (not hardcoded booleans) */}
                 <div className="w-full flex-1 space-y-2 px-3">
                     {[
-                        { icon: LayoutDashboard, label: 'Dashboard', path: '/doctor-dashboard' },
-                        { icon: Users, label: 'Patient Requests', active: true, path: '/doctor-dashboard' },
-                        { icon: Activity, label: 'AI Scan Results', path: '/doctor/scans' },
-                        { icon: History, label: 'Consultation History', path: '#' },
-                        { icon: MessageSquare, label: 'Messages', path: '#' },
-                        { icon: Settings, label: 'Settings', path: '#' }
-                    ].map((item, i) => (
-                        <button key={i} onClick={() => { if(item.path && item.path !== '#') navigate(item.path); }} className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group relative overflow-hidden ${item.active ? 'bg-[#00E5FF]/10 border border-[#00E5FF]/30 text-[#00E5FF] shadow-[0_0_15px_rgba(0,229,255,0.15)]' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
-                            {item.active && <div className="absolute inset-y-0 left-0 w-1 bg-[#00E5FF] shadow-[0_0_10px_#00E5FF]" />}
-                            <item.icon className={`w-5 h-5 ${item.active ? 'text-[#00E5FF]' : 'group-hover:text-[#00E5FF] transition-colors'}`} />
-                            <span className="hidden lg:block font-medium">{item.label}</span>
-                        </button>
-                    ))}
+                        { icon: LayoutDashboard, label: 'Dashboard',            path: '/doctor-dashboard' },
+                        { icon: Users,           label: 'Patient Requests',     path: '/doctor-dashboard' },
+                        { icon: Activity,        label: 'AI Scan Results',      path: '/doctor/scans' },
+                        { icon: History,         label: 'Consultation History', path: '/doctor/history' },
+                        { icon: MessageSquare,   label: 'Messages',             path: '/doctor/messages' },
+                        { icon: BarChart2,       label: 'Analytics',            path: '/doctor/analytics' },
+                        { icon: Settings,        label: 'Settings',             path: '/doctor/settings' },
+                    ].map((item, i) => {
+                        const isActive = location.pathname === item.path;
+                        return (
+                            <button key={i} onClick={() => navigate(item.path)} className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group relative overflow-hidden ${isActive ? 'bg-[#00E5FF]/10 border border-[#00E5FF]/30 text-[#00E5FF] shadow-[0_0_15px_rgba(0,229,255,0.15)]' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
+                                {isActive && <div className="absolute inset-y-0 left-0 w-1 bg-[#00E5FF] shadow-[0_0_10px_#00E5FF]" />}
+                                <item.icon className={`w-5 h-5 ${isActive ? 'text-[#00E5FF]' : 'group-hover:text-[#00E5FF] transition-colors'}`} />
+                                <span className="hidden lg:block font-medium">{item.label}</span>
+                            </button>
+                        );
+                    })}
                 </div>
             </aside>
 
@@ -183,7 +207,11 @@ const DoctorDashboard = () => {
                     </h1>
 
                     <div className="flex items-center gap-6">
-                        <button className="relative p-2 text-gray-400 hover:text-[#00E5FF] transition-colors">
+                        {/* Bell — wired to notifications */}
+                        <button
+                            onClick={() => navigate('/notifications')}
+                            className="relative p-2 text-gray-400 hover:text-[#00E5FF] transition-colors"
+                        >
                             <Bell className="w-6 h-6" />
                             <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#00E5FF] rounded-full shadow-[0_0_8px_#00E5FF]" />
                         </button>
@@ -193,10 +221,11 @@ const DoctorDashboard = () => {
                                 onClick={() => setShowProfileMenu(!showProfileMenu)}
                                 className="flex items-center gap-3 p-1 pr-3 rounded-full border border-white/10 hover:border-[#00E5FF]/40 bg-[#0a1622] transition-colors"
                             >
-                                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#00E5FF] to-blue-600 flex items-center justify-center">
-                                    <User className="w-5 h-5 text-white" />
+                                {/* Fix: show initials instead of generic User icon */}
+                                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#00E5FF] to-blue-600 flex items-center justify-center text-sm font-bold text-white">
+                                    {user?.name ? user.name.charAt(0).toUpperCase() : 'D'}
                                 </div>
-                                <span className="text-sm font-medium mr-1">{user?.name || 'Dr. Smith'}</span>
+                                <span className="text-sm font-medium mr-1">{user?.name || 'Doctor'}</span>
                             </button>
 
                             <AnimatePresence>
@@ -216,10 +245,10 @@ const DoctorDashboard = () => {
                                             <button onClick={() => navigate('/profile')} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">
                                                 <User className="w-4 h-4 group-hover:text-[#00E5FF] transition-colors" /> View Profile
                                             </button>
-                                            <button className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">
+                                            <button onClick={() => navigate('/notifications')} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">
                                                 <Bell className="w-4 h-4 group-hover:text-[#00E5FF] transition-colors" /> Notifications
                                             </button>
-                                            <button className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">
+                                            <button onClick={() => navigate('/doctor/settings')} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">
                                                 <Settings className="w-4 h-4 group-hover:text-[#00E5FF] transition-colors" /> Settings
                                             </button>
                                         </div>
@@ -287,7 +316,7 @@ const DoctorDashboard = () => {
                                         </motion.div>
                                     ) : (
                                         consultations.map((consult) => {
-                                            const aiInfo = extractAIInfo(consult.diagnosis);
+                                            const aiInfo = extractAIInfo(consult);
                                             const isSelected = selectedConsultation?.id === consult.id;
 
                                             return (
@@ -316,6 +345,8 @@ const DoctorDashboard = () => {
                                                         <div className="flex flex-col items-end gap-2">
                                                             {consult.status === 'completed' ? (
                                                                 <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-green-500/20 text-green-400 border border-green-500/20">Reviewed</span>
+                                                            ) : consult.status === 'active' ? (
+                                                                <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400 border border-purple-500/20">Active</span>
                                                             ) : consult.status === 'pending_appointment' ? (
                                                                 <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-500/20 text-blue-400 border border-blue-500/20">Appointment</span>
                                                             ) : (
@@ -338,6 +369,17 @@ const DoctorDashboard = () => {
                                                             View Case <ChevronRight className="w-4 h-4" />
                                                         </span>
                                                     </div>
+                                                    
+                                                    {(consult.status === 'active' || consult.status === 'pending_appointment') && (
+                                                        <div className="mt-3 flex gap-2 w-full relative z-10">
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); setChatConsultation(consult); }}
+                                                                className="flex-1 py-1.5 bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/30 hover:bg-[#00E5FF]/30 rounded-lg text-xs font-bold transition-colors"
+                                                            >
+                                                                Open Chat
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </motion.div>
                                             );
                                         })
@@ -360,9 +402,13 @@ const DoctorDashboard = () => {
                                                 <div>
                                                     <h2 className="text-2xl font-bold text-white mb-1">{selectedConsultation.patient_name}</h2>
                                                     <div className="flex items-center gap-3 text-sm text-gray-400">
-                                                        <span>Age: 32</span> • <span>Gender: M</span> •
+                                                        {selectedConsultation.patient_age && <span>Age: {selectedConsultation.patient_age}</span>}
+                                                        {selectedConsultation.patient_age && selectedConsultation.patient_gender && <span>•</span>}
+                                                        {selectedConsultation.patient_gender && <span>Gender: {selectedConsultation.patient_gender.charAt(0).toUpperCase() + selectedConsultation.patient_gender.slice(1)}</span>}
+                                                        {(selectedConsultation.patient_age || selectedConsultation.patient_gender) && <span>•</span>}
                                                         <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {new Date(selectedConsultation.created_at).toLocaleDateString()}</span>
                                                     </div>
+                                                    {selectedConsultation.patient_email && <p className="text-xs text-gray-500 mt-1">{selectedConsultation.patient_email}</p>}
                                                 </div>
                                             </div>
                                             <div className="text-right">
@@ -398,7 +444,7 @@ const DoctorDashboard = () => {
 
                                             {/* AI Analysis Panel */}
                                             {(() => {
-                                                const aiInfo = extractAIInfo(selectedConsultation.diagnosis);
+                                                const aiInfo = extractAIInfo(selectedConsultation);
                                                 return (
                                                     <div className="bg-[#0B1C2C]/80 rounded-xl p-5 border border-[#00E5FF]/20 relative overflow-hidden">
                                                         <div className="absolute top-0 right-0 w-32 h-32 bg-[#00E5FF]/5 rounded-full blur-[30px] -mr-10 -mt-10" />
@@ -426,7 +472,7 @@ const DoctorDashboard = () => {
                                                             <div className="h-1.5 w-full bg-gray-800 rounded-full overflow-hidden">
                                                                 <motion.div
                                                                     initial={{ width: 0 }}
-                                                                    animate={{ width: aiInfo.confidence.replace('%', '') + '%' }}
+                                                                    animate={{ width: `${aiInfo.confidenceNum}%` }}
                                                                     transition={{ duration: 1, delay: 0.2 }}
                                                                     className={`h-full bg-gradient-to-r ${aiInfo.barColor} shadow-[0_0_10px_currentColor]`}
                                                                 />
@@ -483,11 +529,14 @@ const DoctorDashboard = () => {
                                             <div className="pt-6 mt-4 border-t border-white/10">
                                                 <button
                                                     onClick={handleSubmitDiagnosis}
-                                                    disabled={!diagnosis.trim()}
+                                                    disabled={!diagnosis.trim() || isSubmitting}
                                                     className="w-full py-3.5 bg-gradient-to-r from-[#00E5FF] to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black rounded-lg font-bold shadow-[0_0_20px_rgba(0,229,255,0.3)] hover:shadow-[0_0_30px_rgba(0,229,255,0.5)] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                                 >
-                                                    <Send className="w-5 h-5" />
-                                                    Submit Medical Response to Patient
+                                                    {isSubmitting ? (
+                                                        <><div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" /> Submitting...</>
+                                                    ) : (
+                                                        <><Send className="w-5 h-5" /> Submit Medical Response to Patient</>
+                                                    )}
                                                 </button>
                                             </div>
                                         </div>
@@ -508,6 +557,38 @@ const DoctorDashboard = () => {
                     </div>
                 </div>
             </main>
+
+            {/* Slide-over Chat Panel */}
+            <AnimatePresence>
+                {chatConsultation && (
+                    <motion.div 
+                        initial={{ x: '100%' }}
+                        animate={{ x: 0 }}
+                        exit={{ x: '100%' }}
+                        transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+                        className="fixed inset-y-0 right-0 w-full md:w-[400px] bg-[#0a1622] border-l border-white/10 shadow-2xl z-[10000] flex flex-col"
+                    >
+                        <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#0B1C2C]">
+                            <h3 className="font-bold text-white text-lg flex items-center gap-2">
+                                <MessageSquare className="w-5 h-5 text-[#00E5FF]" /> Chat with {chatConsultation.patient_name}
+                            </h3>
+                            <button onClick={() => setChatConsultation(null)} className="text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 p-2 rounded-full transition-colors">
+                                X
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-hidden p-4 bg-[#0a1622]">
+                            {/* Re-use ConsultationChat component */}
+                            <ConsultationChat 
+                                consultationId={(chatConsultation.id || chatConsultation._id || '').toString()}
+                                currentUserId={user?.id || user?._id || 'doctor'}
+                                otherUserId="patient" // The actual ID should ideally be present in the consultation object
+                                otherUserName={chatConsultation.patient_name}
+                            />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
         </div>
     );
 };

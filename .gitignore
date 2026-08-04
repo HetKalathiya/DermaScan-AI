@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+testsprite_tests\tmp\config.json
+.env
+*.env
+server/.env
+server/debug_*.json
+testsprite_tests/

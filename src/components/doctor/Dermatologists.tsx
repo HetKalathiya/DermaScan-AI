@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ShieldCheck, Calendar, MapPin, Search, ArrowLeft, Clock, X, CheckCircle, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -14,6 +14,7 @@ interface Doctor {
 
 const Dermatologists = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [doctors, setDoctors] = useState<Doctor[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -83,7 +84,8 @@ const Dermatologists = () => {
                     doctor_id: selectedDoctor?.id,
                     appointment_date: bookingDetails.date,
                     appointment_time: bookingDetails.time,
-                    message: bookingDetails.message
+                    message: bookingDetails.message,
+                    image_data: location.state?.image || undefined
                 })
             });
 
@@ -94,9 +96,14 @@ const Dermatologists = () => {
                     setSelectedDoctor(null);
                     navigate('/dashboard'); // Go back to dashboard after success
                 }, 3000);
+            } else {
+                const errData = await res.json();
+                alert(`Booking Failed: ${errData.message || errData.error || 'Unknown error'}`);
+                console.error("Booking failed:", errData);
             }
         } catch (err) {
             console.error(err);
+            alert("Error booking appointment. Please try again.");
         } finally {
             setIsBookingLoading(false);
         }

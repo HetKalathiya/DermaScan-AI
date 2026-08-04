@@ -3,7 +3,8 @@ import Webcam from 'react-webcam';
 import { Upload, Camera, X, RefreshCw, Send, ShieldCheck, LogOut, User, Settings, Users, Activity, ChevronRight, Bell, FileText, HelpCircle, Download, Calendar, ArrowRight, Shield, Zap, Sparkles, AlertTriangle, Share2, Maximize, CheckCircle, Info, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-
+import ConsultationChat from './common/ConsultationChat';
+import { MessageSquare } from 'lucide-react';
 const Dashboard = () => {
     const navigate = useNavigate();
     const webcamRef = useRef<Webcam>(null);
@@ -11,13 +12,18 @@ const Dashboard = () => {
     const [cameraActive, setCameraActive] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [showProfileMenu, setShowProfileMenu] = useState(false);
-    const [user, setUser] = useState<{ name: string, email: string } | null>(null);
+    const [user, setUser] = useState<{ id?: string, _id?: string, name: string, email: string } | null>(null);
+    const [consultations, setConsultations] = useState<any[]>([]);
+    const [chatConsultation, setChatConsultation] = useState<any | null>(null);
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [activeDeviceId, setActiveDeviceId] = useState<string | undefined>(undefined);
 
     const [aiResult, setAiResult] = useState<{ condition: string, confidence: string, riskLevel: 'Low' | 'Medium' | 'High', recommendation: string, result: string } | null>(null);
     const [showHeatmap, setShowHeatmap] = useState(false);
     const [isSharing, setIsSharing] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
+    // Bug #3 Fix: track scan-save errors so user sees a visible warning
+    const [scanSaveError, setScanSaveError] = useState<string | null>(null);
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -40,6 +46,41 @@ const Dashboard = () => {
         };
         checkAuth();
     }, [navigate]);
+
+    useEffect(() => {
+        const fetchConsultations = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                if(token) {
+                    const response = await fetch('http://localhost:5000/api/user/consultations', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if(response.ok) {
+                        const data = await response.json();
+                        setConsultations(data);
+                    }
+                }
+            } catch(e) {}
+        }
+        fetchConsultations();
+    }, []);
+
+    useEffect(() => {
+        const fetchUnread = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                const res = await fetch('http://localhost:5000/api/notifications', {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setUnreadCount(data.unreadCount || 0);
+                }
+            } catch (_) {}
+        };
+        fetchUnread();
+    }, []);
 
     const capture = useCallback(() => {
         if (webcamRef.current) {
@@ -110,25 +151,52 @@ const Dashboard = () => {
                 const storedUser = localStorage.getItem('user');
                 if (token && storedUser && image) {
                     const parsedUser = JSON.parse(storedUser);
-                    await fetch('http://localhost:5000/api/save-scan', {
+                    // Pre-upload image to Cloudinary to get a permanent URL
+                    let imageUrl = image;
+                    try {
+                        const formData = new FormData();
+                        const blob = await fetch(image).then(r => r.blob());
+                        formData.append('image', blob, 'scan.jpg');
+                        const uploadRes = await fetch('http://localhost:5000/api/upload', {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${token}` },
+                            body: formData
+                        });
+                        if (uploadRes.ok) {
+                            const uploadData = await uploadRes.json();
+                            imageUrl = uploadData.data?.url || image;
+                        }
+                    } catch (uploadErr) {
+                        console.warn('Cloudinary pre-upload failed, using base64 fallback:', uploadErr);
+                    }
+                    // Bug #1 Fix: Normalize result to lowercase to match Mongoose enum ['benign','malignant','pending']
+                    const saveRes = await fetch('http://localhost:5000/api/scans/upload', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${token}`
                         },
                         body: JSON.stringify({
-                            userId: parsedUser.id,
-                            image: image,
-                            result: random.result,
+                            userId: parsedUser.id || parsedUser._id,
+                            image: imageUrl,
+                            result: random.result.toLowerCase(),  // Bug #1 Fix: was 'Benign'/'Malignant', now 'benign'/'malignant'
                             condition: random.condition,
-                            confidence: parseInt(random.confidence),
+                            confidence: parseInt(random.confidence),  // Bug #2 Fix: confidence now saved
                             date: new Date().toISOString(),
                             consulted: false
                         })
                     });
+                    if (!saveRes.ok) {
+                        // Bug #3 Fix: surface save failure to user
+                        setScanSaveError('Scan result could not be saved to history. Please check your connection.');
+                        setTimeout(() => setScanSaveError(null), 6000);
+                    }
                 }
             } catch(e) {
                 console.error("Failed to automatically save scan result:", e);
+                // Bug #3 Fix: show visible error so user knows scan wasn't saved
+                setScanSaveError('Scan result could not be saved to history. Please check your connection.');
+                setTimeout(() => setScanSaveError(null), 6000);
             }
         }, 3000);
     };
@@ -144,6 +212,27 @@ const Dashboard = () => {
         setIsSharing(true);
         try {
             const token = localStorage.getItem('token');
+
+            // Step 1: Pre-upload image to Cloudinary to get a permanent HTTPS URL
+            let imageUrl = image;
+            try {
+                const blob = await fetch(image).then(r => r.blob());
+                const formData = new FormData();
+                formData.append('image', blob, 'scan.jpg');
+                const uploadRes = await fetch('http://localhost:5000/api/upload', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
+                });
+                if (uploadRes.ok) {
+                    const uploadData = await uploadRes.json();
+                    imageUrl = uploadData.data?.url || image;
+                }
+            } catch (uploadErr) {
+                console.warn('Pre-upload failed, sending base64:', uploadErr);
+            }
+
+            // Step 2: Send Cloudinary URL + structured AI fields to consultation API
             const res = await fetch('http://localhost:5000/api/consultations', {
                 method: 'POST',
                 headers: {
@@ -151,8 +240,11 @@ const Dashboard = () => {
                     'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
-                    image: image,
-                    ai_result: `${aiResult.condition} (${aiResult.confidence})`
+                    image: imageUrl,
+                    ai_condition: aiResult.condition,
+                    ai_confidence: parseInt(aiResult.confidence),
+                    ai_result: aiResult.result.toLowerCase(),
+                    ai_result_text: `${aiResult.condition} (${aiResult.confidence})`
                 })
             });
 
@@ -160,7 +252,8 @@ const Dashboard = () => {
                 alert('Successfully submitted your scan for doctor review!');
                 resetImage();
             } else {
-                alert('Failed to submit consultation request. Please try again.');
+                const err = await res.json().catch(() => ({}));
+                alert(`Failed to submit: ${err.message || err.error || 'Please try again.'}`);
             }
         } catch (error) {
             console.error(error);
@@ -185,6 +278,22 @@ const Dashboard = () => {
                 <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-[#3B82F6] blur-[200px] mix-blend-screen opacity-10 animate-[pulse_12s_ease-in-out_infinite_alternate]" />
             </div>
 
+            {/* Bug #3 Fix: Scan save error toast — shown when scan fails to persist to DB */}
+            <AnimatePresence>
+                {scanSaveError && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 50, x: '-50%' }}
+                        animate={{ opacity: 1, y: 0, x: '-50%' }}
+                        exit={{ opacity: 0, y: 20, x: '-50%' }}
+                        className="fixed bottom-8 left-1/2 z-[99999] px-6 py-3 rounded-full flex items-center gap-3 backdrop-blur-md border shadow-2xl bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
+                    >
+                        <Activity className="w-5 h-5" />
+                        <span className="font-semibold text-sm">{scanSaveError}</span>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+
             {/* TOP NAVIGATION BAR */}
             <nav className="fixed top-0 left-0 right-0 z-[100] bg-[#0A101C]/80 backdrop-blur-xl border-b border-white/[0.05] h-20 flex items-center justify-between px-6 lg:px-10">
                 <div className="flex items-center gap-3">
@@ -200,9 +309,18 @@ const Dashboard = () => {
                 </div>
 
                 <div className="flex items-center gap-6">
-                    <button className="relative text-slate-400 hover:text-[#06B6D4] transition-colors group">
+                    <button
+                        onClick={() => navigate('/notifications')}
+                        className="relative text-slate-400 hover:text-[#06B6D4] transition-colors group"
+                    >
                         <Bell className="w-6 h-6 group-hover:scale-110 transition-transform" />
-                        <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-[#06B6D4] rounded-full shadow-[0_0_8px_#06B6D4] animate-pulse" />
+                        {unreadCount > 0 ? (
+                            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-[#06B6D4] text-black text-[10px] font-extrabold rounded-full flex items-center justify-center px-1 shadow-[0_0_8px_#06B6D4]">
+                                {unreadCount > 9 ? '9+' : unreadCount}
+                            </span>
+                        ) : (
+                            <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-[#06B6D4] rounded-full shadow-[0_0_8px_#06B6D4] animate-pulse" />
+                        )}
                     </button>
 
                     <div className="relative">
@@ -266,9 +384,9 @@ const Dashboard = () => {
                                         {[
                                             { icon: User, label: 'My Profile', delay: 0, path: '/profile' },
                                             { icon: Activity, label: 'My Scan History', delay: 0.04, path: '/scan-history' },
-                                            { icon: FileText, label: 'My Reports', delay: 0.08, path: '#' },
-                                            { icon: Settings, label: 'Settings', delay: 0.12, path: '#' },
-                                            { icon: HelpCircle, label: 'Help & Support', delay: 0.16, path: '#' }
+                                            { icon: FileText, label: 'My Reports', delay: 0.08, path: '/my-reports' },
+                                            { icon: Settings, label: 'Settings', delay: 0.12, path: '/settings' },
+                                            { icon: HelpCircle, label: 'Help & Support', delay: 0.16, path: '/help' }
                                         ].map((item, idx) => (
                                             <motion.button
                                                 key={idx} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: item.delay, duration: 0.2 }}
@@ -606,7 +724,7 @@ const Dashboard = () => {
                                     {isSharing ? 'Sharing...' : 'Share with Doctor'}
                                 </button>
                                 <button 
-                                    onClick={() => navigate('/dermatologists')}
+                                    onClick={() => navigate('/dermatologists', { state: { image } })}
                                     className="flex-1 min-w-[200px] py-4 rounded-xl font-bold bg-gradient-to-r from-[#06B6D4] to-[#3B82F6] shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] transform hover:-translate-y-1 transition-all flex justify-center items-center gap-2 text-white"
                                 >
                                     <Calendar className="w-5 h-5" /> Book Dermatologist
@@ -618,7 +736,106 @@ const Dashboard = () => {
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+                {/* CONSULTATIONS LIST */}
+                <div className="w-full max-w-4xl mt-12 mb-8 flex flex-col gap-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <h2 className="text-2xl font-bold text-white" style={{ fontFamily: "'Syne', sans-serif" }}>My Consultations</h2>
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => navigate('/appointments')} className="text-sm text-purple-400 hover:text-white font-semibold flex items-center gap-1 transition-colors">
+                                My Appointments →
+                            </button>
+                            <button onClick={() => navigate('/my-reports')} className="text-sm text-[#06B6D4] hover:text-white font-semibold flex items-center gap-1 transition-colors">
+                                View Reports →
+                            </button>
+                        </div>
+                    </div>
+                    {consultations.length === 0 ? (
+                        <p className="text-slate-400">No consultations found.</p>
+                    ) : (
+                        <div className="space-y-4">
+                            {consultations.map(consult => (
+                                <div key={consult.id || consult._id} className="bg-white/[0.02] border border-white/10 p-4 rounded-xl hover:bg-white/5 transition-all">
+                                    <div className="flex justify-between items-center">
+                                        <div className="flex gap-4 items-center">
+                                            <div className="w-12 h-12 bg-white/5 rounded-lg flex items-center justify-center overflow-hidden border border-white/10 shrink-0">
+                                                {consult.image_data ? <img src={consult.image_data} alt="Consultation" className="w-full h-full object-cover" /> : <ShieldCheck className="w-6 h-6 text-slate-400" />}
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-white">Consultation Request</p>
+                                                <p className="text-xs text-slate-400">{new Date(consult.created_at).toLocaleDateString()}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
+                                            <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                                consult.status === 'completed' ? 'bg-green-500/20 text-green-400 border border-green-500/20'
+                                                : (consult.status === 'active' || consult.status === 'pending_appointment') ? 'bg-purple-500/20 text-purple-400 border border-purple-500/20'
+                                                : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/20'}`}>
+                                                {consult.status?.toUpperCase() || 'PENDING'}
+                                            </span>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => setChatConsultation(consult)}
+                                                    className="px-3 py-1.5 bg-[#06B6D4]/20 text-[#06B6D4] border border-[#06B6D4]/30 rounded-lg text-xs font-bold hover:bg-[#06B6D4]/30 transition-colors"
+                                                >
+                                                    {consult.status === 'completed' ? 'Follow Up' : 'Open Chat'}
+                                                </button>
+                                                {consult.status === 'completed' && (
+                                                    <button
+                                                        onClick={() => navigate('/my-reports')}
+                                                        className="px-3 py-1.5 bg-green-500/20 text-green-400 border border-green-500/20 rounded-lg text-xs font-bold hover:bg-green-500/30 transition-colors"
+                                                    >
+                                                        View Report
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {/* Show doctor's diagnosis inline if completed */}
+                                    {consult.status === 'completed' && consult.diagnosis && (
+                                        <div className="mt-3 pt-3 border-t border-white/10 space-y-1">
+                                            <p className="text-xs text-slate-500 uppercase tracking-wider font-bold">Doctor's Diagnosis</p>
+                                            <p className="text-sm text-slate-300">{consult.diagnosis}</p>
+                                            {consult.treatment && <p className="text-xs text-slate-400"><span className="font-bold text-slate-300">Treatment:</span> {consult.treatment}</p>}
+                                            {consult.follow_up && <p className="text-xs text-[#06B6D4] font-semibold">Follow-up: {consult.follow_up}</p>}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </main>
+
+            {/* Slide-over Chat Panel */}
+            <AnimatePresence>
+                {chatConsultation && (
+                    <motion.div 
+                        initial={{ x: '100%' }}
+                        animate={{ x: 0 }}
+                        exit={{ x: '100%' }}
+                        transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+                        className="fixed inset-y-0 right-0 w-full md:w-[400px] bg-[#0F172A] border-l border-white/10 shadow-2xl z-[10000] flex flex-col"
+                    >
+                        <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#0D1528]">
+                            <h3 className="font-bold text-white text-lg flex items-center gap-2">
+                                <MessageSquare className="w-5 h-5 text-[#06B6D4]" /> Doctor Chat
+                            </h3>
+                            <button onClick={() => setChatConsultation(null)} className="text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 p-2 rounded-full transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-hidden p-4 bg-[#0F172A]">
+                            <ConsultationChat 
+                                consultationId={(chatConsultation.id || chatConsultation._id || '').toString()}
+                                currentUserId={user?.id || user?._id || 'patient'}
+                                otherUserId="doctor"
+                                otherUserName="Dermatologist"
+                            />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <style>{`
                 @keyframes shimmer {
