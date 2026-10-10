@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Bell, Shield, Trash2, Eye, EyeOff, ChevronRight, Check, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import PatientNavbar from './PatientNavbar';
 
 const Settings: React.FC = () => {
     const navigate = useNavigate();
@@ -10,11 +11,30 @@ const Settings: React.FC = () => {
     const [confirmPwd, setConfirmPwd] = useState('');
     const [showCurrent, setShowCurrent] = useState(false);
     const [showNew, setShowNew] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [emailNotif, setEmailNotif] = useState(true);
     const [apptReminder, setApptReminder] = useState(true);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+    const handleDeleteAccount = async () => {
+        setIsDeleting(true);
+        try {
+            const token = localStorage.getItem('token');
+            await fetch('http://localhost:5000/api/user/account', {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+        } catch (err) {
+            console.error('Failed to delete account from server:', err);
+        } finally {
+            setIsDeleting(false);
+            localStorage.clear();
+            navigate('/');
+        }
+    };
 
     const showToast = (type: 'success' | 'error', text: string) => {
         setToast({ type, text });
@@ -77,20 +97,37 @@ const Settings: React.FC = () => {
                             <p className="text-gray-400 text-sm mb-6">All your scans, reports and appointments will be permanently deleted. This cannot be undone.</p>
                             <div className="flex gap-3">
                                 <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 rounded-xl border border-white/10 text-gray-300 hover:bg-white/5 font-semibold">Cancel</button>
-                                <button onClick={() => { localStorage.clear(); navigate('/'); }}
-                                    className="flex-1 py-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 font-semibold">Delete Forever</button>
+                                <button 
+                                    onClick={handleDeleteAccount}
+                                    disabled={isDeleting}
+                                    className="flex-1 py-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 font-semibold disabled:opacity-50"
+                                >
+                                    {isDeleting ? 'Deleting...' : 'Delete Forever'}
+                                </button>
                             </div>
                         </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            <header className="relative z-10 border-b border-white/10 bg-[#0B1C2C]/80 backdrop-blur-xl px-6 h-20 flex items-center gap-4">
-                <button onClick={() => navigate('/dashboard')} className="text-gray-400 hover:text-[#00E5FF] transition-colors"><ChevronRight className="w-5 h-5 rotate-180" /></button>
-                <div className="flex items-center gap-2"><Shield className="w-6 h-6 text-[#00E5FF]" /><h1 className="text-xl font-bold">Settings</h1></div>
-            </header>
+            {/* UNIFIED PATIENT PORTAL NAVBAR */}
+            <PatientNavbar currentPath="/settings" />
 
-            <main className="relative z-10 max-w-xl mx-auto px-4 py-10 space-y-6">
+            <div className="pt-24 relative z-10 border-b border-white/10 bg-[#0B1C2C]/50 backdrop-blur-xl px-6 py-4">
+                <div className="max-w-xl mx-auto flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-[#00E5FF]/10 border border-[#00E5FF]/20 flex items-center justify-center">
+                            <Shield className="w-5 h-5 text-[#00E5FF]" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold text-white">Account Settings</h1>
+                            <p className="text-xs text-gray-400">Security preferences & notification options</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <main className="relative z-10 max-w-xl mx-auto px-4 py-8 space-y-6">
 
                 {/* Change Password */}
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
@@ -102,7 +139,7 @@ const Settings: React.FC = () => {
                         {[
                             { label: 'Current Password', val: currentPwd, set: setCurrentPwd, show: showCurrent, toggle: () => setShowCurrent(p => !p) },
                             { label: 'New Password', val: newPwd, set: setNewPwd, show: showNew, toggle: () => setShowNew(p => !p) },
-                            { label: 'Confirm New Password', val: confirmPwd, set: setConfirmPwd, show: showNew, toggle: () => {} }
+                            { label: 'Confirm New Password', val: confirmPwd, set: setConfirmPwd, show: showConfirm, toggle: () => setShowConfirm(p => !p) }
                         ].map(({ label, val, set, show, toggle }) => (
                             <div key={label}>
                                 <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">{label}</label>

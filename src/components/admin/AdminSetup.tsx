@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { BrainCircuit, ShieldCheck, User, Mail, Lock, Eye, EyeOff, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const AdminSetup: React.FC = () => {
   const navigate = useNavigate();
   const [name, setName]             = useState('');
@@ -14,10 +16,11 @@ const AdminSetup: React.FC = () => {
   const [alreadySetup, setAlreadySetup] = useState(false);
   const [error, setError]           = useState('');
   const [success, setSuccess]       = useState(false);
+  const [countdown, setCountdown]   = useState(3);
 
   // Check if admin already exists
   useEffect(() => {
-    fetch('http://localhost:5000/api/admin/setup/status')
+    fetch(`${API_BASE}/api/admin/setup/status`)
       .then(r => r.json())
       .then(d => {
         if (d.adminExists) setAlreadySetup(true);
@@ -26,13 +29,26 @@ const AdminSetup: React.FC = () => {
       .finally(() => setChecking(false));
   }, []);
 
+  // Countdown and redirect on success
+  useEffect(() => {
+    if (!success) return;
+    if (countdown <= 0) {
+      navigate('/admin/login');
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCountdown(prev => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [success, countdown, navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/admin/setup', {
+      const res = await fetch(`${API_BASE}/api/admin/setup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password }),
@@ -40,7 +56,6 @@ const AdminSetup: React.FC = () => {
       const data = await res.json();
       if (!res.ok) { setError(data.message || 'Setup failed.'); return; }
       setSuccess(true);
-      setTimeout(() => navigate('/admin/login'), 2500);
     } catch {
       setError('Could not connect to server. Is the backend running?');
     } finally {
@@ -89,7 +104,7 @@ const AdminSetup: React.FC = () => {
             <CheckCircle className="w-10 h-10 text-green-400" />
           </motion.div>
           <h1 className="text-2xl font-bold text-white mb-3">Admin Account Created!</h1>
-          <p className="text-gray-400">Redirecting you to the login page...</p>
+          <p className="text-gray-400">Redirecting in {countdown}s...</p>
         </motion.div>
       </div>
     );

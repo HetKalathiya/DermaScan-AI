@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DermaScan | AI Skin Analysis</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">DermaScan</div>
+            <p class="subtitle">AI-Powered Lesion Analysis</p>
+        </header>
+
+        <main class="content-grid">
+            <!-- Left Column: Upload -->
+            <section class="upload-section">
+                <div id="drop-area" class="drop-area">
+                    <form class="upload-form">
+                        <input type="file" id="fileElem" accept="image/*" onchange="handleFiles(this.files)">
+                        <label class="button primary" for="fileElem">Choose Image</label>
+                        <p class="helper-text">or paste from clipboard ⌘ + V / Ctrl + V</p>
+                    </form>
+
+                    <div id="preview-container" class="preview-container hidden">
+                        <img id="image-preview" src="" alt="Image Preview">
+                        <div class="action-buttons">
+                            <button id="predict-btn" class="button cta" onclick="uploadImage()">Analyze Risk</button>
+                            <button id="clear-btn" class="button secondary" onclick="clearImage()">Clear</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="loader" class="loader hidden"></div>
+            </section>
+
+            <!-- Right Column: Results -->
+            <section id="result-section" class="result-section hidden">
+                <div class="result-card">
+                    <h2 class="result-title">Analysis Result</h2>
+                    <div id="prediction" class="prediction-text"></div>
+                    <div class="chart-container">
+                        <canvas id="confidenceChart"></canvas>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Custom Context Menu -->
+        <div id="custom-context-menu" class="hidden custom-context-menu">
+            <ul>
+                <li onclick="pasteFromContextMenu()">📋 Paste Image</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+
+</html>

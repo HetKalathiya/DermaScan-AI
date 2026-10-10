@@ -35,6 +35,27 @@ const Navbar = () => {
         setIsMobileMenuOpen(false);
     };
 
+    const handleGetStarted = () => {
+        const token = localStorage.getItem('token');
+        const userStr = localStorage.getItem('user');
+        if (token && userStr) {
+            try {
+                const user = JSON.parse(userStr);
+                if (user.role === 'patient') {
+                    navigate('/dashboard');
+                    return;
+                }
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+            } catch {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+            }
+        }
+        navigate('/login');
+    };
+
+
     return (
         <nav
             className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled
@@ -73,7 +94,7 @@ const Navbar = () => {
                                 )
                             )}
                             <button
-                                onClick={() => navigate('/login')}
+                                onClick={handleGetStarted}
                                 className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white px-6 py-2 rounded-full text-sm font-medium transition-all shadow-lg hover:shadow-cyan-500/25"
                             >
                                 Get Started
@@ -122,7 +143,7 @@ const Navbar = () => {
                                 )
                             )}
                             <button
-                                onClick={() => { navigate('/login'); setIsMobileMenuOpen(false); }}
+                                onClick={() => { handleGetStarted(); setIsMobileMenuOpen(false); }}
                                 className="w-full mt-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-3 rounded-full text-base font-medium"
                             >
                                 Get Started

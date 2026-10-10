@@ -7,6 +7,8 @@ import {
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 interface LogActor {
   _id: string;
   name: string;
@@ -61,7 +63,7 @@ const AdminLogs: React.FC = () => {
         limit: '20',
         type: filterType
       });
-      const response = await fetch(`http://localhost:5000/api/admin/activity-logs?${queryParams.toString()}`, {
+      const response = await fetch(`${API_BASE}/api/admin/activity-logs?${queryParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const resData = await response.json();
@@ -130,7 +132,11 @@ const AdminLogs: React.FC = () => {
               </button>
 
               {/* Filter Tabs */}
-              <div className="flex bg-[#0a1622]/80 border border-white/10 rounded-lg p-0.5 overflow-x-auto max-w-full">
+              <div
+                role="tablist"
+                aria-label="Filter log events by type"
+                className="flex bg-[#0a1622]/80 border border-white/10 rounded-lg p-0.5 overflow-x-auto max-w-full"
+              >
                 {[
                   { label: 'All', value: 'all' },
                   { label: 'Scans', value: 'scan' },
@@ -140,6 +146,8 @@ const AdminLogs: React.FC = () => {
                 ].map(tab => (
                   <button
                     key={tab.value}
+                    role="tab"
+                    aria-selected={filterType === tab.value}
                     onClick={() => { setFilterType(tab.value); setPage(1); }}
                     className={`px-3 py-1 text-xs font-bold rounded-md transition-all shrink-0 ${filterType === tab.value ? 'bg-[#00E5FF] text-black' : 'text-gray-400 hover:text-white'}`}
                   >

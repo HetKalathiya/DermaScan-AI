@@ -17,7 +17,12 @@ const ScanSchema = new mongoose.Schema({
   confidence: { type: Number, min: 0, max: 100, default: 0 },
   // Bug #6 Fix: Added consulted field for doctor review tracking
   consulted: { type: Boolean, default: false },
+  // AI Model telemetry & diagnostic metadata
+  top_diagnosis: { type: mongoose.Schema.Types.Mixed },
+  probabilities: { type: mongoose.Schema.Types.Mixed },
+  recommendation: { type: String },
   created_at: { type: Date, default: Date.now },
 });
 
 module.exports = mongoose.model('Scan', ScanSchema);
+

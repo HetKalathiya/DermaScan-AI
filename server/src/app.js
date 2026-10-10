@@ -23,6 +23,7 @@ app.use('/api/user', require('./routes/user.routes'));
 app.use('/api/appointments', require('./routes/appointment.routes'));
 app.use('/api/consultations', require('./routes/consultation.routes'));
 app.use('/api/doctor/consultations', require('./routes/doctorConsultations.routes'));
+app.use('/api/doctor/schedule', require('./routes/doctorSchedule.routes'));
 app.use('/api/user/consultations', require('./routes/userConsultations.routes'));
 
 // Admin Routes

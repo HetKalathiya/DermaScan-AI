@@ -3,13 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { BrainCircuit, ShieldCheck, Mail, Lock, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const AdminLogin: React.FC = () => {
   const navigate = useNavigate();
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
+  const [email, setEmail]             = useState('');
+  const [password, setPassword]       = useState('');
+  const [showPass, setShowPass]       = useState(false);
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState('');
+  const [failCount, setFailCount]     = useState(0);
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
 
   // Redirect if already logged in as admin
   useEffect(() => {
@@ -27,18 +31,46 @@ const AdminLogin: React.FC = () => {
     }
   }, [navigate]);
 
+  // Lockout timer countdown
+  useEffect(() => {
+    if (lockoutSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setLockoutSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setFailCount(0);
+          setError('');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutSeconds]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (lockoutSeconds > 0) return;
     setError('');
     setLoading(true);
     try {
-      const res  = await fetch('http://localhost:5000/api/auth/login', {
+      const res  = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, role: 'admin' }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.message || 'Login failed.'); return; }
+      if (!res.ok) {
+        const nextFails = failCount + 1;
+        setFailCount(nextFails);
+        if (nextFails >= 5) {
+          setError('Too many failed attempts. Please wait before trying again.');
+          setLockoutSeconds(30);
+        } else {
+          setError(data.error || data.message || 'Login failed.');
+        }
+        return;
+      }
       if (data.user?.role !== 'admin') {
         setError('Access denied. This login is for administrators only.');
         return;
@@ -121,9 +153,9 @@ const AdminLogin: React.FC = () => {
             )}
 
             {/* Submit */}
-            <button type="submit" disabled={loading}
+            <button type="submit" disabled={loading || lockoutSeconds > 0}
               className="w-full py-3.5 bg-gradient-to-r from-amber-400 to-orange-500 text-black font-bold rounded-xl hover:from-amber-300 hover:to-orange-400 transition-all shadow-[0_0_20px_rgba(251,191,36,0.25)] disabled:opacity-50 flex items-center justify-center gap-2 text-sm mt-2">
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing In...</> : <><ShieldCheck className="w-4 h-4" /> Sign In to Admin Panel</>}
+              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing In...</> : lockoutSeconds > 0 ? <>Locked ({lockoutSeconds}s)</> : <><ShieldCheck className="w-4 h-4" /> Sign In to Admin Panel</>}
             </button>
           </form>
         </div>

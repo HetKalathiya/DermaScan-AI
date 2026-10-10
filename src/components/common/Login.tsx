@@ -28,6 +28,19 @@ const Login = () => {
                 role
             }));
 
+            if (response.data?.requires_2fa) {
+                const isDoc = response.data.role === 'doctor' || role === 'doctor';
+                navigate(isDoc ? '/doctor/verify-otp' : '/verify-otp', {
+                    state: {
+                        email: response.data.email || formData.email,
+                        masked_email: response.data.masked_email,
+                        role: response.data.role || role || 'patient',
+                        purpose: '2fa',
+                    }
+                });
+                return;
+            }
+
             const { token, user } = response.data;
             localStorage.setItem('token', token);
             localStorage.setItem('user', JSON.stringify(user));
@@ -39,7 +52,41 @@ const Login = () => {
             }
         } catch (error: any) {
             console.error('Login failed:', error);
-            alert(error.response?.data?.error || 'Login failed');
+            if (error.response?.data?.requires_2fa) {
+                const isDoc = error.response.data.role === 'doctor' || role === 'doctor';
+                navigate(isDoc ? '/doctor/verify-otp' : '/verify-otp', {
+                    state: {
+                        email: error.response.data.email || formData.email,
+                        masked_email: error.response.data.masked_email,
+                        role: error.response.data.role || role || 'patient',
+                        purpose: '2fa',
+                    }
+                });
+                return;
+            }
+            if (error.response?.data?.requires_verification) {
+                const { email: unverifiedEmail, masked_email, role: userRole } = error.response.data;
+                navigate('/verify-otp', {
+                    state: {
+                        email: unverifiedEmail || formData.email,
+                        masked_email,
+                        role: userRole || role || 'patient',
+                        purpose: 'registration',
+                    }
+                });
+                return;
+            }
+            if (error.response?.data?.requires_approval) {
+                navigate('/doctor/pending-approval', {
+                    state: {
+                        email: formData.email,
+                        doctor: error.response.data.doctor,
+                        message: error.response.data.message
+                    }
+                });
+                return;
+            }
+            alert(error.response?.data?.error || error.response?.data?.message || 'Login failed');
             setIsLoading(false);
         }
     };

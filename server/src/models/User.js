@@ -8,10 +8,21 @@ const UserSchema = new mongoose.Schema({
   role: { type: String, enum: ['doctor', 'patient', 'admin'], default: 'patient' },
   name: { type: String },
   age: { type: Number },
-  gender: { type: String, enum: ['male', 'female', 'other', ''] },
+  dob: { type: String },
+  gender: { type: String, enum: ['male', 'female', 'other', 'Male', 'Female', 'Other', 'Intersex', 'Prefer not to say', ''] },
   phone: { type: String },
+  country: { type: String },
+  location: { type: String },
+  bio: { type: String, default: '' },
+  blood_group: { type: String, default: '' },
+  emergency_contact: {
+    name: { type: String, default: '' },
+    phone: { type: String, default: '' }
+  },
   avatar: { type: String },
   isActive: { type: Boolean, default: true },
+  is_verified: { type: Boolean, default: false },
+  two_factor_enabled: { type: Boolean, default: false },
   created_at: { type: Date, default: Date.now },
 });
 

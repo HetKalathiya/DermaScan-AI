@@ -22,6 +22,21 @@ const Register = () => {
     });
     const [agreed, setAgreed] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+    const [profilePhotoName, setProfilePhotoName] = useState<string | null>(null);
+    const [showTermsModal, setShowTermsModal] = useState<string | null>(null);
+
+    const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setProfilePhotoName(file.name);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setProfilePhoto(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
 
     const concernOptions = ['Mole Check', 'Rash', 'Acne', 'Pigmentation', 'Other'];
 
@@ -72,13 +87,24 @@ const Register = () => {
             const response = await import('../../services/api').then(module => module.default.post('/auth/register', {
                 name: formData.fullName,
                 email: formData.email,
-                password: formData.password
+                password: formData.password,
+                dob: formData.dob,
+                gender: formData.sex,
+                skin_type: formData.skinType,
+                phone: formData.phone,
+                country: formData.country,
+                primary_concern: formData.primaryConcern,
+                had_skin_cancer: formData.hadSkinCancer,
             }));
 
-            const { token, user } = response.data;
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(user));
-            navigate('/dashboard');
+            const { email: registeredEmail, masked_email } = response.data;
+            navigate('/verify-otp', {
+                state: {
+                    email: registeredEmail || formData.email,
+                    masked_email,
+                    role: 'patient'
+                }
+            });
         } catch (error: any) {
             console.error('Registration failed:', error);
             alert(error.response?.data?.error || 'Registration failed');
@@ -552,15 +578,34 @@ const Register = () => {
 
                                             {/* Upload Profile Photo */}
                                             <div className="relative group">
-                                                <label className="flex flex-col items-center justify-center w-full h-20 sm:h-24 border-2 border-slate-700/60 border-dashed rounded-xl cursor-pointer bg-[#0F172A] hover:bg-[#1E293B]/50 hover:border-[#06B6D4]/50 transition-all group-hover:shadow-inner">
-                                                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                                        <Upload className="w-5 h-5 sm:w-6 sm:h-6 text-slate-500 mb-2 group-hover:text-[#06B6D4] transition-colors" />
-                                                        <p className="text-xs sm:text-sm text-slate-400 font-medium group-hover:text-slate-300">
-                                                            <span className="text-[#06B6D4] font-semibold">Upload Profile Photo</span> (Optional)
-                                                        </p>
+                                                {profilePhoto ? (
+                                                    <div className="flex items-center justify-between p-3 rounded-xl border border-[#06B6D4]/40 bg-[#0F172A]">
+                                                        <div className="flex items-center gap-3">
+                                                            <img src={profilePhoto} alt="Profile" className="w-12 h-12 rounded-lg object-cover border border-[#06B6D4]/50" />
+                                                            <div className="text-left">
+                                                                <p className="text-xs font-semibold text-white truncate max-w-[180px]">{profilePhotoName || 'Photo selected'}</p>
+                                                                <span className="text-[10px] text-emerald-400">Photo attached</span>
+                                                            </div>
+                                                        </div>
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={() => { setProfilePhoto(null); setProfilePhotoName(null); }}
+                                                            className="text-xs text-red-400 hover:text-red-300 px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 transition-colors"
+                                                        >
+                                                            Remove
+                                                        </button>
                                                     </div>
-                                                    <input type="file" className="hidden" accept="image/*" />
-                                                </label>
+                                                ) : (
+                                                    <label className="flex flex-col items-center justify-center w-full h-20 sm:h-24 border-2 border-slate-700/60 border-dashed rounded-xl cursor-pointer bg-[#0F172A] hover:bg-[#1E293B]/50 hover:border-[#06B6D4]/50 transition-all group-hover:shadow-inner">
+                                                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                                            <Upload className="w-5 h-5 sm:w-6 sm:h-6 text-slate-500 mb-2 group-hover:text-[#06B6D4] transition-colors" />
+                                                            <p className="text-xs sm:text-sm text-slate-400 font-medium group-hover:text-slate-300">
+                                                                <span className="text-[#06B6D4] font-semibold">Upload Profile Photo</span> (Optional)
+                                                            </p>
+                                                        </div>
+                                                        <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} />
+                                                    </label>
+                                                )}
                                             </div>
 
                                             {/* Terms Checkbox */}
@@ -578,7 +623,7 @@ const Register = () => {
                                                         </svg>
                                                     </div>
                                                     <span className="text-sm text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">
-                                                        I agree to the <a href="#" className="font-semibold text-[#06B6D4] hover:underline">Medical Terms of Service</a> and acknowledge the <a href="#" className="font-semibold text-[#3B82F6] hover:underline">HIPAA Privacy Policy</a>.
+                                                        I agree to the <button type="button" onClick={() => setShowTermsModal('terms')} className="font-semibold text-[#06B6D4] hover:underline inline text-left">Medical Terms of Service</button> and acknowledge the <button type="button" onClick={() => setShowTermsModal('hipaa')} className="font-semibold text-[#3B82F6] hover:underline inline text-left">HIPAA Privacy Policy</button>.
                                                     </span>
                                                 </label>
                                             </div>
@@ -621,6 +666,56 @@ const Register = () => {
                     </motion.div>
                 </div>
             </div>
+
+            {/* Terms / HIPAA Policy Modal */}
+            <AnimatePresence>
+                {showTermsModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-[#0F172A] border border-slate-700 max-w-lg w-full rounded-2xl p-6 shadow-2xl space-y-4"
+                        >
+                            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <ShieldCheck className="w-5 h-5 text-[#06B6D4]" />
+                                    {showTermsModal === 'terms' ? 'Medical Terms of Service' : 'HIPAA Privacy Policy'}
+                                </h3>
+                                <button 
+                                    onClick={() => setShowTermsModal(null)}
+                                    className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                            <div className="text-xs text-slate-300 space-y-3 leading-relaxed max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                                {showTermsModal === 'terms' ? (
+                                    <>
+                                        <p><strong>1. Diagnostic Disclaimer:</strong> DermaScan AI is an assistive pre-screening tool powered by convolutional neural networks. It does NOT provide definitive medical diagnoses and does not replace in-person dermatological evaluation.</p>
+                                        <p><strong>2. Emergency Situations:</strong> If you suspect acute infection, rapid tissue necrosis, or bleeding lesions, immediately seek emergency medical attention.</p>
+                                        <p><strong>3. Data Privacy:</strong> User scans and clinical evaluations are stored under strict role-based access control and are only accessible by you and authorized healthcare providers you choose to consult.</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p><strong>1. Protected Health Information (PHI):</strong> All patient health records, images, and consultation history are encrypted in transit via TLS 1.3 and at rest with AES-256 standard encryption.</p>
+                                        <p><strong>2. Consent & Sharing:</strong> Your medical images are never shared with third parties or external commercial entities without your explicit consent.</p>
+                                        <p><strong>3. Right to Erasure:</strong> You maintain full ownership of your clinical records and can permanently delete your account and associated scans from Account Settings at any time.</p>
+                                    </>
+                                )}
+                            </div>
+                            <div className="pt-3 border-t border-slate-800 flex justify-end">
+                                <button 
+                                    onClick={() => setShowTermsModal(null)}
+                                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#06B6D4] to-[#3B82F6] text-white text-xs font-bold shadow-lg"
+                                >
+                                    Understood
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
 
             {/* Global Styles injected for scanning animation */}
             <style>{`

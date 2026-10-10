@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Datasets and large files
+HAM10000_images_part_1/
+HAM10000_images_part_2/
+dataset/
+*.csv
+*.pth
+
+# Generated outputs & uploads
+static/uploads/*
+!static/uploads/.gitkeep
+*.png
+!confusion_matrix.png
+!model_accuracy_graph.png
+!model_proficiency_graph.png
+!training_curves.png
+*.txt
+*.json
+!requirements.txt
+
+# OS generated files
+.DS_Store
+Thumbs.db

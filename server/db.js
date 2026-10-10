@@ -20,7 +20,8 @@ const schemaOptions = {
 const userSchema = new mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, unique: true, required: true },
-    password_hash: { type: String, required: true }
+    password_hash: { type: String, required: true },
+    is_verified: { type: Boolean, default: false }
 }, schemaOptions);
 
 const doctorSchema = new mongoose.Schema({

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   BrainCircuit, LayoutDashboard, Users, Activity,
-  History, MessageSquare, Settings, BarChart2
+  History, MessageSquare, Settings, BarChart2, Calendar
 } from 'lucide-react';
 
 interface NavItem {
@@ -13,12 +13,13 @@ interface NavItem {
 }
 
 interface DoctorSidebarProps {
-  activeItem: 'dashboard' | 'requests' | 'scans' | 'history' | 'messages' | 'settings' | 'analytics';
+  activeItem: 'dashboard' | 'requests' | 'scans' | 'history' | 'messages' | 'settings' | 'analytics' | 'schedule';
   unreadCount?: number;
 }
 
 const NAV_ITEMS: (NavItem & { key: DoctorSidebarProps['activeItem'] })[] = [
   { key: 'dashboard',  icon: LayoutDashboard, label: 'Dashboard',           path: '/doctor-dashboard' },
+  { key: 'schedule',   icon: Calendar,        label: 'Schedule & Slots',    path: '/doctor/schedule' },
   { key: 'requests',   icon: Users,           label: 'Patient Requests',    path: '/doctor-dashboard' },
   { key: 'scans',      icon: Activity,        label: 'AI Scan Results',     path: '/doctor/scans' },
   { key: 'history',    icon: History,         label: 'Consultation History', path: '/doctor/history' },

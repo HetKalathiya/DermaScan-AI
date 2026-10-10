@@ -1,8 +1,112 @@
 const Consultation = require('../models/Consultation');
 const Doctor = require('../models/Doctor');
+const LockedSlot = require('../models/LockedSlot');
 const Message = require('../models/Message');
 const Notification = require('../models/Notification');
 const { cloudinary } = require('../config/cloudinary');
+
+const DEFAULT_SLOTS = [
+    { time: '09:00 AM', period: 'morning' },
+    { time: '09:30 AM', period: 'morning' },
+    { time: '10:00 AM', period: 'morning' },
+    { time: '10:30 AM', period: 'morning' },
+    { time: '11:00 AM', period: 'morning' },
+    { time: '11:30 AM', period: 'morning' },
+    { time: '12:00 PM', period: 'morning' },
+    { time: '02:00 PM', period: 'afternoon' },
+    { time: '02:30 PM', period: 'afternoon' },
+    { time: '03:00 PM', period: 'afternoon' },
+    { time: '03:30 PM', period: 'afternoon' },
+    { time: '04:00 PM', period: 'afternoon' },
+    { time: '04:30 PM', period: 'afternoon' },
+    { time: '05:00 PM', period: 'afternoon' },
+];
+
+// ─── Get Available Time Slots for a Doctor on a Date ───────────────────────
+const getAvailableSlots = async (req, res, next) => {
+    try {
+        const { doctorId } = req.params;
+        const dateStr = req.query.date;
+
+        if (!doctorId) {
+            return res.status(400).json({ success: false, error: 'Doctor ID is required' });
+        }
+        if (!dateStr) {
+            return res.status(400).json({ success: false, error: 'Date is required (YYYY-MM-DD)' });
+        }
+
+        // Fetch active bookings for this doctor on that date
+        const bookedAppointments = await Consultation.find({
+            doctor_id: doctorId,
+            appointment_date: dateStr,
+            status: { $in: ['pending_appointment', 'active', 'completed'] }
+        }).select('appointment_time');
+
+        // Fetch doctor locked slots on that date
+        const lockedSlots = await LockedSlot.find({
+            doctor_id: doctorId,
+            date: dateStr
+        });
+
+        const isFullDayLocked = lockedSlots.some(l => l.is_full_day);
+        const lockedTimes = new Set(
+            lockedSlots.filter(l => l.time).map(l => l.time.trim().toUpperCase())
+        );
+
+        // Normalize booked times into set
+        const bookedTimes = new Set(
+            bookedAppointments.map(a => (a.appointment_time || '').trim().toUpperCase())
+        );
+
+        // Check if selected date is today to filter past slots
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+        const isToday = dateStr === todayStr;
+        const currentHour = now.getHours();
+        const currentMin = now.getMinutes();
+
+        const parseSlotToMinutes = (timeStr) => {
+            const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+            if (!match) return 0;
+            let [_, h, m, meridiem] = match;
+            let hour = parseInt(h, 10);
+            const minute = parseInt(m, 10);
+            if (meridiem.toUpperCase() === 'PM' && hour !== 12) hour += 12;
+            if (meridiem.toUpperCase() === 'AM' && hour === 12) hour = 0;
+            return hour * 60 + minute;
+        };
+
+        const nowMinutes = currentHour * 60 + currentMin;
+
+        const formattedSlots = DEFAULT_SLOTS.map(slot => {
+            const normalizedTime = slot.time.trim().toUpperCase();
+            const isBooked = bookedTimes.has(normalizedTime);
+            const isLocked = isFullDayLocked || lockedTimes.has(normalizedTime);
+            const slotMinutes = parseSlotToMinutes(slot.time);
+            const isPast = isToday && slotMinutes <= (nowMinutes + 15);
+
+            return {
+                time: slot.time,
+                period: slot.period,
+                isBooked,
+                isLocked,
+                isPast,
+                available: !isBooked && !isLocked && !isPast
+            };
+        });
+
+        res.json({
+            success: true,
+            doctorId,
+            date: dateStr,
+            isFullDayLocked,
+            slots: formattedSlots
+        });
+    } catch (err) {
+        console.error('Error fetching available slots:', err);
+        next(err);
+    }
+};
 
 // ─── Patient: Book Appointment ─────────────────────────────────────────────
 const bookAppointment = async (req, res, next) => {
@@ -10,12 +114,48 @@ const bookAppointment = async (req, res, next) => {
         const { doctor_id, appointment_date, appointment_time, message, image_data,
                 ai_condition, ai_confidence, ai_result } = req.body;
 
+        if (!doctor_id || !appointment_date || !appointment_time) {
+            return res.status(400).json({ success: false, error: 'Doctor, date, and time slot are required' });
+        }
+
         // Validate appointment date is not in the past
-        if (appointment_date) {
-            const apptDate = new Date(`${appointment_date}T${appointment_time || '00:00'}`);
-            if (apptDate < new Date()) {
-                return res.status(400).json({ success: false, error: 'Appointment date cannot be in the past' });
-            }
+        const apptDate = new Date(`${appointment_date}T00:00:00`);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (apptDate < today) {
+            return res.status(400).json({ success: false, error: 'Appointment date cannot be in the past' });
+        }
+
+        // Check if slot is locked by the doctor
+        const lockedSlot = await LockedSlot.findOne({
+            doctor_id,
+            date: appointment_date,
+            $or: [
+                { time: appointment_time.trim() },
+                { is_full_day: true }
+            ]
+        });
+
+        if (lockedSlot) {
+            return res.status(409).json({
+                success: false,
+                error: 'The doctor is unavailable at this scheduled time. Please choose another slot.'
+            });
+        }
+
+        // Check if slot is already booked for this doctor
+        const existingAppointment = await Consultation.findOne({
+            doctor_id,
+            appointment_date,
+            appointment_time: appointment_time.trim(),
+            status: { $in: ['pending_appointment', 'active', 'completed'] }
+        });
+
+        if (existingAppointment) {
+            return res.status(409).json({
+                success: false,
+                error: 'This time slot is already booked. Please choose another time.'
+            });
         }
 
         let imgData = image_data;
@@ -29,7 +169,7 @@ const bookAppointment = async (req, res, next) => {
             doctor_id: doctor_id,
             status: 'pending_appointment',
             appointment_date,
-            appointment_time,
+            appointment_time: appointment_time.trim(),
             message,
             image_data: imgData || undefined,
             ai_condition: ai_condition || 'Unknown',
@@ -158,8 +298,28 @@ const updateDoctorConsultation = async (req, res, next) => {
 // ─── Patient: Get My Consultations ────────────────────────────────────────
 const getUserConsultations = async (req, res, next) => {
     try {
-        const consultations = await Consultation.find({ patient_id: req.user._id }).sort({ created_at: -1 });
-        const mapped = consultations.map(c => c.toJSON());
+        const consultations = await Consultation.find({ patient_id: req.user._id })
+            .populate({
+                path: 'doctor_id',
+                populate: { path: 'user_id', select: 'name email' }
+            })
+            .populate('claimed_by', 'name email')
+            .sort({ created_at: -1 });
+
+        const mapped = consultations.map(c => {
+            const doc = c.toJSON();
+            let doctorName = null;
+            if (c.doctor_id && typeof c.doctor_id === 'object') {
+                doctorName = c.doctor_id.user_id?.name || c.doctor_id.name;
+            }
+            if (!doctorName && c.claimed_by && typeof c.claimed_by === 'object') {
+                doctorName = c.claimed_by.name || c.claimed_by.user_id?.name;
+            }
+            doc.doctor_name = doctorName || 'Dermatologist';
+            doc.doctor_specialization = c.doctor_id?.specialization || 'Dermatologist';
+            doc.doctor_hospital = c.doctor_id?.hospital_name || 'Clinic';
+            return doc;
+        });
         res.status(200).json(mapped);
     } catch (err) {
         next(err);
@@ -255,14 +415,29 @@ const getMyAppointments = async (req, res, next) => {
             status: { $in: ['pending_appointment', 'active', 'completed', 'cancelled'] },
             appointment_date: { $exists: true }
         })
-        .populate('doctor_id', 'specialization hospital_name')
+        .populate({
+            path: 'doctor_id',
+            populate: { path: 'user_id', select: 'name email' }
+        })
+        .populate('claimed_by', 'name email')
         .sort({ appointment_date: -1 });
 
-        const formatted = appointments.map(a => ({
-            ...a.toJSON(),
-            doctor_specialization: a.doctor_id?.specialization || 'Dermatologist',
-            doctor_hospital: a.doctor_id?.hospital_name || 'Unknown Hospital'
-        }));
+        const formatted = appointments.map(a => {
+            const doc = a.toJSON();
+            let doctorName = null;
+            if (a.doctor_id && typeof a.doctor_id === 'object') {
+                doctorName = a.doctor_id.user_id?.name || a.doctor_id.name;
+            }
+            if (!doctorName && a.claimed_by && typeof a.claimed_by === 'object') {
+                doctorName = a.claimed_by.name || a.claimed_by.user_id?.name;
+            }
+            return {
+                ...doc,
+                doctor_name: doctorName || 'Dermatologist',
+                doctor_specialization: a.doctor_id?.specialization || 'Dermatologist',
+                doctor_hospital: a.doctor_id?.hospital_name || 'Unknown Hospital'
+            };
+        });
 
         res.json({ success: true, data: formatted });
     } catch (err) {
@@ -289,6 +464,7 @@ const cancelAppointment = async (req, res, next) => {
 };
 
 module.exports = {
+    getAvailableSlots,
     bookAppointment,
     getMyAppointments,
     cancelAppointment,

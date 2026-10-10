@@ -50,7 +50,7 @@ const DoctorHeaderProfile: React.FC<DoctorHeaderProfileProps> = ({ userName, use
     {
       label: 'View Profile',
       icon: User,
-      onClick: () => { navigate('/profile'); setOpen(false); },
+      onClick: () => { navigate('/doctor/settings'); setOpen(false); },
       className: 'text-gray-300 hover:text-white hover:bg-[#00E5FF]/10',
     },
     {

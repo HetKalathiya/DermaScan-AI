@@ -1,11 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const { uploadScan, getUserScans, deleteScan } = require('../controllers/scan.controller');
-const { protect } = require('../middlewares/auth.middleware');
+const { analyzeScan, uploadScan, getUserScans, deleteScan } = require('../controllers/scan.controller');
+const { protect, optionalAuth, requireVerified } = require('../middlewares/auth.middleware');
+const { validateImageUpload } = require('../middlewares/imageValidator.middleware');
 
+// Public/Optional-Auth AI Analysis Gateway (Protected by strict image validation)
+router.post('/analyze', optionalAuth, validateImageUpload, analyzeScan);
+
+// Authenticated Routes
 router.use(protect);
 
-router.post('/upload', uploadScan);
+router.post('/upload', requireVerified, uploadScan);
+
 
 // /me → returns scans for the logged-in patient (uses JWT, secure)
 router.get('/me', (req, res, next) => {

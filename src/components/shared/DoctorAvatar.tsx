@@ -115,13 +115,13 @@ const DoctorAvatar: React.FC<DoctorAvatarProps> = ({ size = 'md', showDropdown =
                             <p className="text-xs text-[#00E5FF] mt-0.5 truncate">{doctor?.email || 'doctor@dermascan.com'}</p>
                         </div>
                         <div className="p-2 space-y-1">
-                            <button onClick={() => navigate('/profile')} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">
+                            <button onClick={() => navigate('/doctor/settings')} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">
                                 <User className="w-4 h-4 group-hover:text-[#00E5FF] transition-colors" /> View Profile
                             </button>
-                            <button className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">
+                            <button onClick={() => navigate('/notifications')} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">
                                 <Bell className="w-4 h-4 group-hover:text-[#00E5FF] transition-colors" /> Notifications
                             </button>
-                            <button className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">
+                            <button onClick={() => navigate('/doctor/settings')} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">
                                 <Settings className="w-4 h-4 group-hover:text-[#00E5FF] transition-colors" /> Settings
                             </button>
                         </div>

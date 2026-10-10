@@ -4,6 +4,7 @@ import { Upload, Camera, X, RefreshCw, Send, ShieldCheck, LogOut, User, Settings
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import ConsultationChat from './common/ConsultationChat';
+import PatientNavbar from './common/PatientNavbar';
 import { MessageSquare } from 'lucide-react';
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -11,8 +12,7 @@ const Dashboard = () => {
     const [image, setImage] = useState<string | null>(null);
     const [cameraActive, setCameraActive] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [showProfileMenu, setShowProfileMenu] = useState(false);
-    const [user, setUser] = useState<{ id?: string, _id?: string, name: string, email: string } | null>(null);
+    const [user, setUser] = useState<{ id?: string, _id?: string, name: string, email: string, role?: string } | null>(null);
     const [consultations, setConsultations] = useState<any[]>([]);
     const [chatConsultation, setChatConsultation] = useState<any | null>(null);
     const [cameraError, setCameraError] = useState<string | null>(null);
@@ -24,6 +24,8 @@ const Dashboard = () => {
     const [unreadCount, setUnreadCount] = useState(0);
     // Bug #3 Fix: track scan-save errors so user sees a visible warning
     const [scanSaveError, setScanSaveError] = useState<string | null>(null);
+    const [isImageMaximized, setIsImageMaximized] = useState(false);
+    const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -31,17 +33,31 @@ const Dashboard = () => {
             const storedUser = localStorage.getItem('user');
 
             if (!token) {
-                navigate('/login');
+                navigate('/login', { replace: true });
                 return;
             }
 
             if (storedUser) {
-                const parsedUser = JSON.parse(storedUser);
-                if (parsedUser.role === 'doctor') {
-                    navigate('/doctor-dashboard');
-                    return;
+                try {
+                    const parsedUser = JSON.parse(storedUser);
+                    if (parsedUser.role === 'admin') {
+                        navigate('/admin/dashboard', { replace: true });
+                        return;
+                    }
+                    if (parsedUser.role === 'doctor') {
+                        navigate('/doctor-dashboard', { replace: true });
+                        return;
+                    }
+                    if (parsedUser.role !== 'patient') {
+                        navigate('/login', { replace: true });
+                        return;
+                    }
+                    setUser(parsedUser);
+                } catch {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                    navigate('/login', { replace: true });
                 }
-                setUser(parsedUser);
             }
         };
         checkAuth();
@@ -132,73 +148,55 @@ const Dashboard = () => {
         setAiResult(null);
     };
 
-    const handleAnalyze = () => {
+    const handleAnalyze = async () => {
         if (!image) return;
         setIsAnalyzing(true);
-        // Mock AI computation
-        setTimeout(async () => {
-            const mockResults = [
-                { condition: "Benign Nevus", confidence: "98%", riskLevel: "Low" as const, recommendation: "No immediate action required. Monitor for changes.", result: "Benign" },
-                { condition: "Actinic Keratosis", confidence: "85%", riskLevel: "Medium" as const, recommendation: "Consult a dermatologist for a detailed evaluation.", result: "Benign" },
-                { condition: "Melanoma Indicator", confidence: "92%", riskLevel: "High" as const, recommendation: "Urgent: Please book a consultation with a specialist immediately.", result: "Malignant" }
-            ];
-            const random = mockResults[Math.floor(Math.random() * mockResults.length)];
-            setAiResult(random);
-            setIsAnalyzing(false);
+        setScanSaveError(null);
 
-            try {
-                const token = localStorage.getItem('token');
-                const storedUser = localStorage.getItem('user');
-                if (token && storedUser && image) {
-                    const parsedUser = JSON.parse(storedUser);
-                    // Pre-upload image to Cloudinary to get a permanent URL
-                    let imageUrl = image;
-                    try {
-                        const formData = new FormData();
-                        const blob = await fetch(image).then(r => r.blob());
-                        formData.append('image', blob, 'scan.jpg');
-                        const uploadRes = await fetch('http://localhost:5000/api/upload', {
-                            method: 'POST',
-                            headers: { 'Authorization': `Bearer ${token}` },
-                            body: formData
-                        });
-                        if (uploadRes.ok) {
-                            const uploadData = await uploadRes.json();
-                            imageUrl = uploadData.data?.url || image;
-                        }
-                    } catch (uploadErr) {
-                        console.warn('Cloudinary pre-upload failed, using base64 fallback:', uploadErr);
-                    }
-                    // Bug #1 Fix: Normalize result to lowercase to match Mongoose enum ['benign','malignant','pending']
-                    const saveRes = await fetch('http://localhost:5000/api/scans/upload', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        },
-                        body: JSON.stringify({
-                            userId: parsedUser.id || parsedUser._id,
-                            image: imageUrl,
-                            result: random.result.toLowerCase(),  // Bug #1 Fix: was 'Benign'/'Malignant', now 'benign'/'malignant'
-                            condition: random.condition,
-                            confidence: parseInt(random.confidence),  // Bug #2 Fix: confidence now saved
-                            date: new Date().toISOString(),
-                            consulted: false
-                        })
-                    });
-                    if (!saveRes.ok) {
-                        // Bug #3 Fix: surface save failure to user
-                        setScanSaveError('Scan result could not be saved to history. Please check your connection.');
-                        setTimeout(() => setScanSaveError(null), 6000);
-                    }
-                }
-            } catch(e) {
-                console.error("Failed to automatically save scan result:", e);
-                // Bug #3 Fix: show visible error so user knows scan wasn't saved
-                setScanSaveError('Scan result could not be saved to history. Please check your connection.');
-                setTimeout(() => setScanSaveError(null), 6000);
+        try {
+            const token = localStorage.getItem('token');
+            const storedUser = localStorage.getItem('user');
+            const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+
+            // Direct call to Node Gateway which validates headers/size/dimensions and invokes Python AI model
+            const response = await fetch('http://localhost:5000/api/scans/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({
+                    image,
+                    userId: parsedUser?.id || parsedUser?._id
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                const errorMessage = data.error || data.message || 'AI skin analysis failed';
+                setScanSaveError(errorMessage);
+                setTimeout(() => setScanSaveError(null), 8000);
+                setIsAnalyzing(false);
+                return;
             }
-        }, 3000);
+
+            const ai = data.data.ai;
+            setAiResult({
+                condition: ai.condition,
+                confidence: typeof ai.confidence === 'string' ? ai.confidence : `${ai.confidence}%`,
+                riskLevel: ai.riskLevel,
+                recommendation: ai.recommendation,
+                result: ai.result === 'malignant' ? 'Malignant' : 'Benign'
+            });
+
+        } catch (error: any) {
+            console.error("Failed to analyze skin image:", error);
+            setScanSaveError(error.message || 'Unable to connect to DermaScan AI service. Please ensure the backend is running.');
+            setTimeout(() => setScanSaveError(null), 8000);
+        } finally {
+            setIsAnalyzing(false);
+        }
     };
 
     const handleLogout = () => {
@@ -263,6 +261,90 @@ const Dashboard = () => {
         }
     };
 
+    const handleDownloadPDF = async () => {
+        if (!aiResult) return;
+        setIsDownloadingPDF(true);
+        try {
+            const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+                import('html2canvas'),
+                import('jspdf'),
+            ]);
+
+            const container = document.createElement('div');
+            container.style.cssText = `
+                width:794px; min-height:600px; background:#fff;
+                font-family:'Segoe UI',Arial,sans-serif; color:#1e293b;
+                position:absolute; left:-9999px; top:0; box-sizing:border-box;
+            `;
+            const isMalignant = aiResult.result?.toLowerCase() === 'malignant' || aiResult.riskLevel === 'High';
+            const riskColor = isMalignant ? '#DC2626' : '#16A34A';
+            const riskBg = isMalignant ? '#FEF2F2' : '#F0FDF4';
+            const riskBorder = isMalignant ? '#FECACA' : '#BBF7D0';
+            const scanDate = new Date().toISOString().split('T')[0];
+            const scanTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            container.innerHTML = `
+                <div style="background:linear-gradient(135deg,#0284C7,#2563EB);padding:32px 40px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 4px 20px rgba(37,99,235,0.12);">
+                    <div style="display:flex;align-items:center;gap:14px;">
+                        <div style="width:48px;height:48px;border-radius:12px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.4);">
+                            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+                        </div>
+                        <div><div style="font-size:22px;font-weight:800;color:#fff;">DermaScan <span style="color:#e0f2fe;">AI</span></div><div style="font-size:10px;color:rgba(255,255,255,.85);letter-spacing:1.8px;text-transform:uppercase;font-weight:600;">Clinical AI Dermatology Report</div></div>
+                    </div>
+                    <div style="text-align:right;"><div style="font-size:11px;color:rgba(255,255,255,.8);text-transform:uppercase;letter-spacing:1px;font-weight:600;">Report Date</div><div style="font-size:15px;font-weight:800;color:#fff;font-family:monospace;">${scanDate}</div><div style="font-size:11px;color:rgba(255,255,255,.85);margin-top:4px;">${scanTime}</div></div>
+                </div>
+                <div style="background:#f0f9ff;border-bottom:1px solid #bae6fd;padding:16px 40px;display:flex;justify-content:space-between;align-items:center;">
+                    <div style="display:flex;gap:36px;">
+                        <div><div style="font-size:10px;color:#0284c7;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:3px;">Patient</div><div style="font-size:15px;font-weight:800;color:#0f172a;">${user?.name || 'Patient'}</div></div>
+                        <div><div style="font-size:10px;color:#0284c7;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:3px;">Risk Category</div><div style="font-size:14px;font-weight:700;color:#0f172a;">${aiResult.riskLevel} Risk</div></div>
+                    </div>
+                    <div style="background:${riskBg};color:${riskColor};border:1px solid ${riskBorder};font-size:11px;font-weight:800;letter-spacing:1.5px;border-radius:20px;padding:6px 16px;">${aiResult.result?.toUpperCase() || 'SCAN COMPLETED'}</div>
+                </div>
+                <div style="padding:32px 40px;display:flex;gap:28px;">
+                    ${image ? `
+                    <div style="flex-shrink:0;">
+                        <div style="font-size:11px;color:#0284c7;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin-bottom:8px;">Scan Image</div>
+                        <div style="width:200px;height:200px;border-radius:14px;overflow:hidden;border:2px solid #bae6fd;background:#f8fafc;box-shadow:0 8px 24px -4px rgba(2,132,199,0.12);">
+                            <img src="${image}" style="width:100%;height:100%;object-fit:cover;" crossorigin="anonymous" />
+                        </div>
+                    </div>` : ''}
+                    <div style="flex:1;">
+                        <div style="font-size:11px;color:#0284c7;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin-bottom:10px;">AI Analysis Findings</div>
+                        <div style="background:#ffffff;border-radius:14px;border:1px solid #e2e8f0;box-shadow:0 4px 20px -2px rgba(2,132,199,0.08);overflow:hidden;">
+                            <div style="padding:16px 20px;border-bottom:1px solid #f1f5f9;background:#f8fafc;"><div style="font-size:10px;color:#64748b;margin-bottom:3px;font-weight:600;">Detected Condition</div><div style="font-size:20px;font-weight:800;color:#0f172a;">${aiResult.condition}</div></div>
+                            <div style="padding:16px 20px;border-bottom:1px solid #f1f5f9;"><div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:11px;color:#475569;font-weight:700;">AI Confidence Score</span><span style="font-size:15px;font-weight:800;color:#0284c7;font-family:monospace;">${aiResult.confidence}</span></div></div>
+                            <div style="padding:16px 20px;background:#f8fafc;"><div style="font-size:10px;color:#64748b;font-weight:600;margin-bottom:6px;">Recommendation</div><div style="font-size:13px;color:#334155;line-height:1.5;">${aiResult.recommendation}</div></div>
+                        </div>
+                        <div style="margin-top:18px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;"><p style="font-size:11px;color:#92400e;line-height:1.6;margin:0;"><strong>Medical Disclaimer:</strong> This AI-assisted analysis report is intended for preliminary screening only. Please consult a board-certified dermatologist for medical evaluation.</p></div>
+                    </div>
+                </div>
+                <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:20px 40px;display:flex;justify-content:space-between;align-items:center;">
+                    <p style="font-size:10px;color:#64748b;margin:0;">⚕️ DermaScan AI Clinical Platform • Patient Self-Scan Report</p>
+                    <div style="text-align:right;"><div style="font-size:12px;font-weight:800;color:#0284c7;">DermaScan AI</div><div style="font-size:10px;color:#94a3b8;">${scanDate}</div></div>
+                </div>
+            `;
+            document.body.appendChild(container);
+
+            const canvas = await html2canvas(container, {
+                scale: 2, useCORS: true, allowTaint: true,
+                backgroundColor: '#ffffff', logging: false,
+            });
+            document.body.removeChild(container);
+
+            const imgData = canvas.toDataURL('image/jpeg', 0.95);
+            const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const pageW = pdf.internal.pageSize.getWidth();
+            const pageH = (canvas.height * pageW) / canvas.width;
+            pdf.addImage(imgData, 'JPEG', 0, 0, pageW, pageH);
+            pdf.save(`DermaScan_Report_${aiResult.condition.replace(/[^a-zA-Z0-9]/g, '_')}_${scanDate}.pdf`);
+        } catch (err) {
+            console.error('Failed to generate PDF:', err);
+            alert('Failed to generate PDF. Please try again.');
+        } finally {
+            setIsDownloadingPDF(false);
+        }
+    };
+
     const getRiskColor = (risk: string) => {
         if (risk === 'High') return 'text-red-500 bg-red-500/10 border-red-500/20';
         if (risk === 'Medium') return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
@@ -294,138 +376,12 @@ const Dashboard = () => {
             </AnimatePresence>
 
 
-            {/* TOP NAVIGATION BAR */}
-            <nav className="fixed top-0 left-0 right-0 z-[100] bg-[#0A101C]/80 backdrop-blur-xl border-b border-white/[0.05] h-20 flex items-center justify-between px-6 lg:px-10">
-                <div className="flex items-center gap-3">
-                    <div className="relative flex items-center justify-center">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#06B6D4] to-[#3B82F6] flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.3)] relative overflow-hidden z-10">
-                            <div className="absolute inset-0 bg-white/20"></div>
-                            <ShieldCheck className="w-6 h-6 text-white relative z-10" />
-                        </div>
-                    </div>
-                    <span className="text-2xl font-extrabold tracking-tight" style={{ fontFamily: "'Syne', sans-serif" }}>
-                        DermaScan <span className="text-[#06B6D4]">AI</span>
-                    </span>
-                </div>
-
-                <div className="flex items-center gap-6">
-                    <button
-                        onClick={() => navigate('/notifications')}
-                        className="relative text-slate-400 hover:text-[#06B6D4] transition-colors group"
-                    >
-                        <Bell className="w-6 h-6 group-hover:scale-110 transition-transform" />
-                        {unreadCount > 0 ? (
-                            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-[#06B6D4] text-black text-[10px] font-extrabold rounded-full flex items-center justify-center px-1 shadow-[0_0_8px_#06B6D4]">
-                                {unreadCount > 9 ? '9+' : unreadCount}
-                            </span>
-                        ) : (
-                            <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-[#06B6D4] rounded-full shadow-[0_0_8px_#06B6D4] animate-pulse" />
-                        )}
-                    </button>
-
-                    <div className="relative">
-                        {/* AVATAR TRIGGER */}
-                        <div
-                            onClick={() => setShowProfileMenu(!showProfileMenu)}
-                            className="relative w-[38px] h-[38px] rounded-full cursor-pointer group flex items-center justify-center transition-transform hover:scale-105"
-                        >
-                            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-[#06B6D4] to-[#3B82F6] p-[2px] animate-[spin_4s_linear_infinite] group-hover:shadow-[0_0_15px_rgba(6,182,212,0.6)]">
-                                <div className="w-full h-full bg-[#0F172A] rounded-full" />
-                            </div>
-                            <span className="relative z-10 text-white text-[13px] font-bold tracking-wider" style={{ fontFamily: "'Syne', sans-serif" }}>
-                                {user?.name ? user.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'HK'}
-                            </span>
-                            <div className="absolute top-0.5 right-0.5 w-[9px] h-[9px] bg-[#10B981] rounded-full border-[1.5px] border-[#0F172A] z-20">
-                                <div className="absolute inset-0 bg-[#10B981] rounded-full animate-ping opacity-75" />
-                            </div>
-                        </div>
-
-                        {/* DROPDOWN MENU */}
-                        <AnimatePresence>
-                            {showProfileMenu && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: -10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -10 }}
-                                    transition={{ duration: 0.2, staggerChildren: 0.04 }}
-                                    className="absolute right-0 mt-3 w-[240px] rounded-[16px] overflow-hidden z-[9999]"
-                                    style={{
-                                        backgroundColor: 'rgba(13, 21, 40, 0.92)',
-                                        backdropFilter: 'blur(20px)',
-                                        boxShadow: '0 0 20px rgba(6,182,212,0.1), 0 10px 40px rgba(0,0,0,0.5)',
-                                        border: '1px solid rgba(6,182,212,0.2)'
-                                    }}
-                                >
-                                    <div className="p-5 flex flex-col items-center border-b border-white/[0.06]">
-                                        <div className="relative w-[60px] h-[60px] rounded-full mb-3 flex items-center justify-center">
-                                            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-[#06B6D4] to-[#3B82F6] p-[2px] animate-[spin_5s_linear_infinite]">
-                                                <div className="w-full h-full bg-[#0D1528] rounded-full" />
-                                            </div>
-                                            <span className="relative z-10 text-white text-xl font-bold" style={{ fontFamily: "'Syne', sans-serif" }}>
-                                                {user?.name ? user.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'HK'}
-                                            </span>
-                                        </div>
-                                        <h3 className="text-white text-[16px] font-bold mb-1.5" style={{ fontFamily: "'Syne', sans-serif" }}>
-                                            {user?.name || 'Het Koustav'}
-                                        </h3>
-                                        <div className="flex items-center gap-1.5 bg-[#10B981]/10 border border-[#10B981]/20 px-2.5 py-1 rounded-full mb-2">
-                                            <span className="text-[10px] uppercase font-bold text-[#10B981] tracking-wider" style={{ fontFamily: "'DM Sans', sans-serif" }}>Patient</span>
-                                        </div>
-                                        <p className="text-xs text-slate-400 mb-2.5" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                                            {user?.email || 'het@gmail.com'}
-                                        </p>
-                                        <div className="flex items-center gap-1.5 bg-[#10B981]/10 px-2 py-0.5 rounded-full border border-[#10B981]/20">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
-                                            <span className="text-[10px] text-[#10B981] font-bold tracking-widest uppercase">Online</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="p-2 space-y-0.5" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                                        {[
-                                            { icon: User, label: 'My Profile', delay: 0, path: '/profile' },
-                                            { icon: Activity, label: 'My Scan History', delay: 0.04, path: '/scan-history' },
-                                            { icon: FileText, label: 'My Reports', delay: 0.08, path: '/my-reports' },
-                                            { icon: Settings, label: 'Settings', delay: 0.12, path: '/settings' },
-                                            { icon: HelpCircle, label: 'Help & Support', delay: 0.16, path: '/help' }
-                                        ].map((item, idx) => (
-                                            <motion.button
-                                                key={idx} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: item.delay, duration: 0.2 }}
-                                                onClick={() => { if (item.path) navigate(item.path); }}
-                                                className="w-full relative flex items-center justify-between px-3 py-2.5 rounded-lg group transition-all duration-300 hover:bg-[#06B6D4]/10 overflow-hidden"
-                                            >
-                                                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-0 bg-[#06B6D4] group-hover:h-full transition-all duration-300" />
-                                                <div className="flex items-center gap-3">
-                                                    <item.icon className="w-4 h-4 text-slate-400 group-hover:text-[#06B6D4] transition-colors" />
-                                                    <span className="text-sm font-medium text-slate-300 group-hover:text-white transition-colors">{item.label}</span>
-                                                </div>
-                                                <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-[#06B6D4] transition-transform group-hover:translate-x-0.5" />
-                                            </motion.button>
-                                        ))}
-                                    </div>
-
-                                    <div className="h-px w-full bg-white/[0.06]" />
-
-                                    <div className="p-2">
-                                        <motion.button
-                                            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.2 }}
-                                            onClick={handleLogout}
-                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-all duration-300 hover:bg-[#ef4444]/10"
-                                            style={{ fontFamily: "'DM Sans', sans-serif" }}
-                                        >
-                                            <LogOut className="w-4 h-4 text-[#ef4444]" />
-                                            <span className="text-sm font-medium text-[#ef4444]">Sign Out</span>
-                                        </motion.button>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
-                </div>
-            </nav>
+            {/* UNIFIED PATIENT PORTAL NAVBAR */}
+            <PatientNavbar currentPath="/dashboard" />
 
             {/* MAIN CONTENT AREA */}
             <main className="pt-32 pb-20 px-4 flex flex-col items-center relative z-10">
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12 max-w-2xl px-4">
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10 max-w-2xl px-4">
                     <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4" style={{ fontFamily: "'Syne', sans-serif" }}>
                         Skin Analysis Dashboard
                     </h1>
@@ -626,9 +582,14 @@ const Dashboard = () => {
                                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 border border-[#06B6D4] border-dashed rounded-full animate-pulse shadow-[0_0_20px_rgba(6,182,212,0.5)] pointer-events-none">
                                                 <div className="absolute -top-3 -right-3 w-6 h-6 bg-[#06B6D4] text-black rounded-full flex items-center justify-center text-[10px] font-bold">AI</div>
                                             </div>
-                                            <div className="absolute bottom-4 right-4 bg-black/50 backdrop-blur-md p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer border border-white/10">
+                                            <button 
+                                                type="button"
+                                                onClick={() => setIsImageMaximized(true)}
+                                                className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-md p-2 rounded-lg opacity-80 hover:opacity-100 transition-opacity cursor-pointer border border-white/10 hover:border-[#06B6D4]/50"
+                                                title="View Full Resolution"
+                                            >
                                                 <Maximize className="w-5 h-5 text-white" />
-                                            </div>
+                                            </button>
                                             
                                             <div className="absolute top-4 left-4 flex gap-2">
                                                 <span className="bg-black/60 backdrop-blur text-white text-xs px-2 py-1 rounded font-medium border border-white/10">Original</span>
@@ -712,8 +673,13 @@ const Dashboard = () => {
 
                             {/* SECTION 6 — Action Buttons */}
                             <div className="w-full bg-[#0B1425]/90 backdrop-blur-xl rounded-[24px] border border-white/[0.08] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.4)] flex flex-col sm:flex-row flex-wrap gap-4 mt-2">
-                                <button className="flex-1 min-w-[200px] py-4 rounded-xl font-bold bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all flex justify-center items-center gap-2 text-white">
-                                    <Download className="w-5 h-5 text-slate-400" /> Download Full PDF
+                                <button 
+                                    onClick={handleDownloadPDF}
+                                    disabled={isDownloadingPDF}
+                                    className="flex-1 min-w-[200px] py-4 rounded-xl font-bold bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all flex justify-center items-center gap-2 text-white disabled:opacity-50"
+                                >
+                                    {isDownloadingPDF ? <RefreshCw className="w-5 h-5 animate-spin text-[#06B6D4]" /> : <Download className="w-5 h-5 text-slate-400" />}
+                                    {isDownloadingPDF ? 'Generating PDF...' : 'Download Full PDF'}
                                 </button>
                                 <button 
                                     onClick={handleShareWithDoctor}
@@ -762,7 +728,11 @@ const Dashboard = () => {
                                                 {consult.image_data ? <img src={consult.image_data} alt="Consultation" className="w-full h-full object-cover" /> : <ShieldCheck className="w-6 h-6 text-slate-400" />}
                                             </div>
                                             <div>
-                                                <p className="font-bold text-white">Consultation Request</p>
+                                                <p className="font-bold text-white">
+                                                    {consult.doctor_name && consult.doctor_name !== 'Dermatologist'
+                                                        ? `Consultation with ${consult.doctor_name}`
+                                                        : 'Consultation Request'}
+                                                </p>
                                                 <p className="text-xs text-slate-400">{new Date(consult.created_at).toLocaleDateString()}</p>
                                             </div>
                                         </div>
@@ -819,7 +789,13 @@ const Dashboard = () => {
                     >
                         <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#0D1528]">
                             <h3 className="font-bold text-white text-lg flex items-center gap-2">
-                                <MessageSquare className="w-5 h-5 text-[#06B6D4]" /> Doctor Chat
+                                <MessageSquare className="w-5 h-5 text-[#06B6D4]" /> Chat with {
+                                    chatConsultation.doctor_name ||
+                                    chatConsultation.doctor_id?.user_id?.name ||
+                                    chatConsultation.doctor_id?.name ||
+                                    chatConsultation.claimed_by?.name ||
+                                    'Dermatologist'
+                                }
                             </h3>
                             <button onClick={() => setChatConsultation(null)} className="text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 p-2 rounded-full transition-colors">
                                 <X className="w-5 h-5" />
@@ -830,8 +806,52 @@ const Dashboard = () => {
                                 consultationId={(chatConsultation.id || chatConsultation._id || '').toString()}
                                 currentUserId={user?.id || user?._id || 'patient'}
                                 otherUserId="doctor"
-                                otherUserName="Dermatologist"
+                                otherUserName={
+                                    chatConsultation.doctor_name ||
+                                    chatConsultation.doctor_id?.user_id?.name ||
+                                    chatConsultation.doctor_id?.name ||
+                                    chatConsultation.claimed_by?.name ||
+                                    'Dermatologist'
+                                }
                             />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Image Maximize Lightbox Modal */}
+            <AnimatePresence>
+                {isImageMaximized && image && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[11000] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-4 sm:p-6"
+                    >
+                        <div className="absolute top-4 right-4 z-10 flex items-center gap-3">
+                            <span className="text-xs text-gray-400 bg-white/10 px-3 py-1.5 rounded-full border border-white/10">
+                                {showHeatmap ? 'Heatmap View' : 'Original Scan'}
+                            </span>
+                            <button 
+                                onClick={() => setIsImageMaximized(false)}
+                                className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/10"
+                                title="Close Fullscreen View"
+                            >
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <div className="relative max-w-4xl max-h-[85vh] w-full flex items-center justify-center rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-black">
+                            <img 
+                                src={image as string} 
+                                alt="Maximized Scan" 
+                                className="max-w-full max-h-[85vh] object-contain rounded-2xl" 
+                            />
+                            {showHeatmap && (
+                                <div 
+                                    className="absolute inset-0 mix-blend-overlay opacity-75 pointer-events-none" 
+                                    style={{ background: 'radial-gradient(circle at 50% 50%, rgba(239,68,68,0.8) 0%, rgba(234,179,8,0.5) 30%, transparent 70%)' }} 
+                                />
+                            )}
                         </div>
                     </motion.div>
                 )}

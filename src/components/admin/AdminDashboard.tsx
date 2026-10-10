@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, type FC, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -9,10 +9,12 @@ import {
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 interface Stats { totalPatients: number; totalDoctors: number; pendingDoctors: number; totalScans: number; totalConsultations: number; }
 interface Log { _id: string; type: string; message: string; actor_name: string; created_at: string; }
 
-const LOG_ICONS: Record<string, React.ReactNode> = {
+const LOG_ICONS: Record<string, ReactNode> = {
   scan:         <ScanSearch className="w-4 h-4 text-[#00E5FF]" />,
   doctor:       <Stethoscope className="w-4 h-4 text-blue-400" />,
   alert:        <AlertTriangle className="w-4 h-4 text-amber-400" />,
@@ -36,7 +38,7 @@ const timeAgo = (dateStr: string) => {
   return `${Math.floor(hrs / 24)}d ago`;
 };
 
-const AdminDashboard: React.FC = () => {
+const AdminDashboard: FC = () => {
   const navigate = useNavigate();
   const [stats, setStats]   = useState<Stats | null>(null);
   const [logs, setLogs]     = useState<Log[]>([]);
@@ -44,19 +46,28 @@ const AdminDashboard: React.FC = () => {
   const [error, setError]   = useState('');
   const token = localStorage.getItem('token');
 
-  useEffect(() => {
+  const fetchDashboard = useCallback(() => {
+    setLoading(true);
+    setError('');
     const headers = { Authorization: `Bearer ${token}` };
     Promise.all([
-      fetch('http://localhost:5000/api/admin/stats', { headers }).then(r => r.json()),
-      fetch('http://localhost:5000/api/admin/activity-logs?limit=10', { headers }).then(r => r.json()),
+      fetch(`${API_BASE}/api/admin/stats`, { headers }).then(r => r.json()),
+      fetch(`${API_BASE}/api/admin/activity-logs?limit=10`, { headers }).then(r => r.json()),
     ])
       .then(([statsRes, logsRes]) => {
         if (statsRes.success) setStats(statsRes.data);
         if (logsRes.success !== false) setLogs(logsRes.logs || []);
       })
-      .catch(() => setError('Failed to load dashboard data. Check your connection.'))
+      .catch((err) => {
+        console.error('Dashboard fetch error:', err);
+        setError('Failed to load dashboard data. Check your connection.');
+      })
       .finally(() => setLoading(false));
   }, [token]);
+
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
 
   const statCards = stats ? [
     { label: 'Total Patients', value: stats.totalPatients, icon: Users, color: 'text-[#00E5FF]', bg: 'bg-[#00E5FF]/10', border: 'border-[#00E5FF]/20', action: () => navigate('/admin/users') },
@@ -88,7 +99,7 @@ const AdminDashboard: React.FC = () => {
             <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 rounded-xl px-5 py-4">
               <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
               <p className="text-red-400">{error}</p>
-              <button onClick={() => window.location.reload()} className="ml-auto text-sm text-red-400 hover:underline">Retry</button>
+              <button onClick={fetchDashboard} className="ml-auto text-sm text-red-400 hover:underline">Retry</button>
             </div>
           )}
 
@@ -117,6 +128,9 @@ const AdminDashboard: React.FC = () => {
                 {statCards.map((card, i) => (
                   <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
                     onClick={card.action}
+                    role={card.action ? 'button' : undefined}
+                    tabIndex={card.action ? 0 : undefined}
+                    onKeyDown={(e) => { if (card.action && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); card.action(); } }}
                     className={`p-6 rounded-2xl bg-[#0a1622]/80 border ${card.border} flex items-start justify-between hover:-translate-y-1 transition-all duration-200 ${card.action ? 'cursor-pointer hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)]' : ''}`}>
                     <div>
                       <p className="text-gray-400 text-xs uppercase tracking-wider mb-2">{card.label}</p>

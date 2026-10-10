@@ -7,6 +7,8 @@ import {
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 interface UserDetail {
   _id: string;
   name: string;
@@ -35,10 +37,19 @@ const AdminDoctors: React.FC = () => {
   
   // Search, pagination & filtering
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalDoctors, setTotalDoctors] = useState(0);
   const [filterType, setFilterType] = useState<'all' | 'approved' | 'pending'>('all');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   // Modal states
   const [confirmModal, setConfirmModal] = useState<{
@@ -49,6 +60,15 @@ const AdminDoctors: React.FC = () => {
     userId?: string;
   } | null>(null);
 
+  const [toast, setToast] = useState('');
+  
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(''), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
+
   const [actionInProgress, setActionInProgress] = useState(false);
   const token = localStorage.getItem('token');
 
@@ -56,7 +76,7 @@ const AdminDoctors: React.FC = () => {
     setLoadingPending(true);
     setPendingError('');
     try {
-      const response = await fetch('http://localhost:5000/api/admin/doctors/pending', {
+      const response = await fetch(`${API_BASE}/api/admin/doctors/pending`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const resData = await response.json();
@@ -79,9 +99,10 @@ const AdminDoctors: React.FC = () => {
       const queryParams = new URLSearchParams({
         page: page.toString(),
         limit: '10',
-        filter: filterType
+        filter: filterType,
+        search: debouncedSearch
       });
-      const response = await fetch(`http://localhost:5000/api/admin/doctors?${queryParams.toString()}`, {
+      const response = await fetch(`${API_BASE}/api/admin/doctors?${queryParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const resData = await response.json();
@@ -97,7 +118,7 @@ const AdminDoctors: React.FC = () => {
     } finally {
       setLoadingAll(false);
     }
-  }, [token, page, filterType]);
+  }, [token, page, filterType, debouncedSearch]);
 
   useEffect(() => {
     fetchPendingDoctors();
@@ -117,11 +138,11 @@ const AdminDoctors: React.FC = () => {
       const method = 'PATCH';
 
       if (type === 'approve') {
-        url = `http://localhost:5000/api/admin/doctors/${doctorId}/approve`;
+        url = `${API_BASE}/api/admin/doctors/${doctorId}/approve`;
       } else if (type === 'reject') {
-        url = `http://localhost:5000/api/admin/doctors/${doctorId}/reject`;
+        url = `${API_BASE}/api/admin/doctors/${doctorId}/reject`;
       } else if ((type === 'suspend' || type === 'activate') && userId) {
-        url = `http://localhost:5000/api/admin/users/${userId}/suspend`;
+        url = `${API_BASE}/api/admin/users/${userId}/suspend`;
       }
 
       if (url) {
@@ -139,30 +160,15 @@ const AdminDoctors: React.FC = () => {
           fetchAllDoctors();
           setConfirmModal(null);
         } else {
-          alert(resData.message || 'Action failed.');
+          setToast(resData.message || 'Action failed.');
         }
       }
     } catch {
-      alert('Network error. Failed to execute action.');
+      setToast('Network error. Failed to execute action.');
     } finally {
       setActionInProgress(false);
     }
   };
-
-  // Filter approved doctors by search client-side (backend does filter.approved, frontend does local name search)
-  const filteredApprovedDoctors = allDoctors.filter(doc => {
-    const name = doc.user_id?.name || '';
-    const email = doc.user_id?.email || '';
-    const spec = doc.specialization || '';
-    const hosp = doc.hospital_name || '';
-    const searchLower = search.toLowerCase();
-    return (
-      name.toLowerCase().includes(searchLower) ||
-      email.toLowerCase().includes(searchLower) ||
-      spec.toLowerCase().includes(searchLower) ||
-      hosp.toLowerCase().includes(searchLower)
-    );
-  });
 
   return (
     <div className="flex h-screen bg-[#060f1a] text-white overflow-hidden">
@@ -331,7 +337,7 @@ const AdminDoctors: React.FC = () => {
                 <p className="text-red-400">{allError}</p>
                 <button onClick={fetchAllDoctors} className="text-[#00E5FF] font-semibold text-sm hover:underline ml-auto">Retry</button>
               </div>
-            ) : filteredApprovedDoctors.length === 0 ? (
+            ) : allDoctors.length === 0 ? (
               <div className="bg-[#0a1622]/80 border border-white/10 rounded-2xl p-12 text-center text-gray-500">
                 <Search className="w-10 h-10 mx-auto mb-2 opacity-30" />
                 <p className="font-semibold text-gray-300">No doctors match your criteria</p>
@@ -352,7 +358,7 @@ const AdminDoctors: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 text-xs">
-                      {filteredApprovedDoctors.map((doc) => (
+                      {allDoctors.map((doc) => (
                         <tr key={doc._id} className="hover:bg-white/5 transition-colors">
                           <td className="py-4 px-6">
                             <p className="font-bold text-white">{doc.user_id?.name || 'N/A'}</p>
@@ -438,7 +444,7 @@ const AdminDoctors: React.FC = () => {
       {/* CONFIRMATION DIALOG MODAL */}
       <AnimatePresence>
         {confirmModal && confirmModal.show && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onKeyDown={(e) => { if (e.key === 'Escape') setConfirmModal(null); }}>
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -510,6 +516,11 @@ const AdminDoctors: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+      {toast && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed bottom-6 right-6 z-[200] bg-red-500/90 backdrop-blur-sm text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-2xl border border-red-400/30 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4" />{toast}
+        </motion.div>
+      )}
     </div>
   );
 };

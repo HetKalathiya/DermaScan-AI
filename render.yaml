@@ -1,0 +1,40 @@
+services:
+  # 1. Node.js Express Backend with Socket.IO
+  - type: web
+    name: dermascan-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AI_SERVICE_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        value: dq5tcgmhp
+      - key: CLOUDINARY_API_KEY
+        value: 533976218179522
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLIENT_URL
+        value: "*"
+
+  # 2. Python Flask AI Model Microservice
+  - type: web
+    name: dermascan-ai-model
+    runtime: python
+    rootDir: ai-service
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.13

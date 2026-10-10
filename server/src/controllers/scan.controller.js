@@ -2,6 +2,109 @@ const Scan = require('../models/Scan');
 const ActivityLog = require('../models/ActivityLog');
 const { getSocketIO } = require('../sockets');
 const { cloudinary } = require('../config/cloudinary');
+const AIService = require('../services/ai.service');
+
+const analyzeScan = async (req, res, next) => {
+  try {
+    // req.validatedImage was guaranteed by imageValidator.middleware.js
+    const validatedImage = req.validatedImage;
+    if (!validatedImage) {
+      return res.status(400).json({ success: false, error: 'Validated image data missing.' });
+    }
+
+    // Step 1: Run through AI Model microservice
+    const aiResult = await AIService.predictSkinLesion(validatedImage);
+
+    // Step 2: Upload image to Cloudinary if available
+    let storedImageUrl = validatedImage.base64;
+    try {
+      if (cloudinary && cloudinary.uploader) {
+        const uploadRes = await cloudinary.uploader.upload(validatedImage.base64, {
+          folder: 'dermascan-images'
+        });
+        if (uploadRes && uploadRes.secure_url) {
+          storedImageUrl = uploadRes.secure_url;
+        }
+      }
+    } catch (uploadErr) {
+      console.warn('Cloudinary upload fallback to base64:', uploadErr.message);
+    }
+
+    // Step 3: Determine patient ID (authenticated user or request body or fallback)
+    let pid = (req.user && req.user._id) ? req.user._id.toString() : (req.body.userId || req.body.patient_id);
+
+    let savedScan = null;
+    if (pid) {
+      const riskScore = aiResult.riskLevel === 'High' ? 88 : aiResult.riskLevel === 'Medium' ? 55 : 15;
+      savedScan = await Scan.create({
+        patient_id: pid,
+        image_url: storedImageUrl,
+        result: aiResult.result,
+        condition: aiResult.condition,
+        risk_level: riskScore,
+        confidence: aiResult.confidence,
+        recommendation: aiResult.recommendation,
+        top_diagnosis: aiResult.top_diagnosis,
+        probabilities: {
+          tiers: aiResult.all_probabilities,
+          fine_grained: aiResult.fine_grained_probabilities
+        },
+        consulted: false
+      });
+
+      const io = getSocketIO();
+      if (io) {
+        io.emit('new_scan', { scan: savedScan });
+        if (aiResult.riskLevel === 'High' || aiResult.result === 'malignant') {
+          io.emit('high_risk_alert', {
+            scan: savedScan,
+            message: `High risk detected for scan ${savedScan._id}: ${aiResult.condition}`
+          });
+          await ActivityLog.create({
+            type: 'alert',
+            message: `High risk detected for scan ${savedScan._id}: ${aiResult.condition} (${aiResult.confidence}%)`
+          }).catch(() => {});
+        }
+      }
+
+      await ActivityLog.create({
+        type: 'scan',
+        message: `New AI scan analyzed for patient ${pid}: ${aiResult.condition}`
+      }).catch(() => {});
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Skin analysis completed successfully',
+      data: {
+        ai: {
+          prediction: aiResult.prediction,
+          condition: aiResult.condition,
+          confidence: aiResult.confidence,
+          confidenceFormatted: aiResult.confidenceFormatted,
+          riskLevel: aiResult.riskLevel,
+          result: aiResult.result,
+          risk_color: aiResult.risk_color,
+          recommendation: aiResult.recommendation,
+          top_diagnosis: aiResult.top_diagnosis,
+          all_probabilities: aiResult.all_probabilities,
+          fine_grained_probabilities: aiResult.fine_grained_probabilities
+        },
+        scan: savedScan,
+        image_url: storedImageUrl,
+        image_meta: {
+          width: validatedImage.width,
+          height: validatedImage.height,
+          mimeType: validatedImage.mimeType,
+          sizeBytes: validatedImage.sizeBytes
+        }
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
 
 const uploadScan = async (req, res, next) => {
   try {
@@ -73,4 +176,5 @@ const deleteScan = async (req, res, next) => {
   }
 };
 
-module.exports = { uploadScan, getUserScans, deleteScan };
+module.exports = { analyzeScan, uploadScan, getUserScans, deleteScan };
+

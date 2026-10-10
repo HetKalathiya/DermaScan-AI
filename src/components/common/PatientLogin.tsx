@@ -30,12 +30,48 @@ const PatientLogin = () => {
                     password: formData.password,
                 })
             );
+
+            if (response.data?.requires_2fa) {
+                navigate('/verify-otp', {
+                    state: {
+                        email: response.data.email || formData.email,
+                        masked_email: response.data.masked_email,
+                        role: 'patient',
+                        purpose: '2fa',
+                    }
+                });
+                return;
+            }
+
             const { token, user } = response.data;
             localStorage.setItem('token', token);
             localStorage.setItem('user', JSON.stringify(user));
             navigate('/dashboard');
         } catch (err: any) {
-            setError(err.response?.data?.error || 'Login failed. Please try again.');
+            if (err.response?.data?.requires_2fa) {
+                navigate('/verify-otp', {
+                    state: {
+                        email: err.response.data.email || formData.email,
+                        masked_email: err.response.data.masked_email,
+                        role: 'patient',
+                        purpose: '2fa',
+                    }
+                });
+                return;
+            }
+            if (err.response?.data?.requires_verification) {
+                const { email: unverifiedEmail, masked_email, role: userRole } = err.response.data;
+                navigate('/verify-otp', {
+                    state: {
+                        email: unverifiedEmail || formData.email,
+                        masked_email,
+                        role: userRole || 'patient',
+                        purpose: 'registration',
+                    }
+                });
+                return;
+            }
+            setError(err.response?.data?.error || err.response?.data?.message || 'Login failed. Please try again.');
             setIsLoading(false);
         }
     };
@@ -230,9 +266,9 @@ const PatientLogin = () => {
                                     </div>
                                     <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Remember me</span>
                                 </label>
-                                <a href="#" className="text-sm font-semibold text-[#00E5FF] hover:text-white transition-colors underline decoration-[#00E5FF]/30 underline-offset-4 hover:decoration-white">
+                                <Link to="/forgot-password" className="text-sm font-semibold text-[#00E5FF] hover:text-white transition-colors underline decoration-[#00E5FF]/30 underline-offset-4 hover:decoration-white">
                                     Forgot password?
-                                </a>
+                                </Link>
                             </div>
 
                             {/* Submit */}

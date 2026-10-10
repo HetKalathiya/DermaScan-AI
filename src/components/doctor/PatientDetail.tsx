@@ -56,7 +56,8 @@ const PatientDetail: React.FC = () => {
     const stored = localStorage.getItem('user');
     if (!token || !stored) { navigate('/login'); return; }
     const parsed = JSON.parse(stored);
-    if (parsed.role !== 'doctor') { navigate('/dashboard'); return; }
+    if (parsed.role === 'admin') { navigate('/admin/dashboard', { replace: true }); return; }
+    if (parsed.role !== 'doctor') { navigate('/dashboard', { replace: true }); return; }
     setCurrentUser(parsed);
 
     const fetchData = async () => {

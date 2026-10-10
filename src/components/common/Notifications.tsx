@@ -17,7 +17,7 @@ const Notifications: React.FC = () => {
     const navigate = useNavigate();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+    const [user, setUser] = useState<{ name: string; email: string; role?: string } | null>(null);
 
     useEffect(() => {
         const stored = localStorage.getItem('user');
@@ -72,7 +72,7 @@ const Notifications: React.FC = () => {
 
     const handleNotificationClick = (n: Notification) => {
         if (!n.is_read) markAsRead(n._id);
-        navigate(n.link || '/dashboard');
+        navigate(n.link || (user?.role === 'doctor' ? '/doctor-dashboard' : '/dashboard'));
     };
 
     const timeAgo = (dateStr: string) => {
@@ -105,7 +105,11 @@ const Notifications: React.FC = () => {
             {/* Header */}
             <header className="relative z-10 border-b border-white/10 bg-[#0B1C2C]/80 backdrop-blur-xl px-6 h-20 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <button onClick={() => navigate('/dashboard')} className="text-gray-400 hover:text-[#00E5FF] transition-colors">
+                    <button 
+                        onClick={() => navigate(user?.role === 'doctor' ? '/doctor-dashboard' : '/dashboard')} 
+                        className="text-gray-400 hover:text-[#00E5FF] transition-colors"
+                        title="Back"
+                    >
                         <ChevronRight className="w-5 h-5 rotate-180" />
                     </button>
                     <div className="flex items-center gap-2">

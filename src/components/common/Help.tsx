@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HelpCircle, ChevronDown, ChevronUp, Mail, ShieldCheck, Brain, Calendar, FileText, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import PatientNavbar from './PatientNavbar';
 
 const faqs = [
     {
@@ -42,6 +43,15 @@ const Help: React.FC = () => {
     const navigate = useNavigate();
     const [openIndex, setOpenIndex] = useState<number | null>(null);
 
+    const isPatient = (() => {
+        try {
+            const u = JSON.parse(localStorage.getItem('user') || '{}');
+            return (u?.role || '').toLowerCase() === 'patient';
+        } catch {
+            return false;
+        }
+    })();
+
     const toggle = (i: number) => setOpenIndex(prev => (prev === i ? null : i));
 
     return (
@@ -49,10 +59,29 @@ const Help: React.FC = () => {
             <div className="fixed inset-0 z-0 opacity-10 pointer-events-none"
                 style={{ backgroundImage: `radial-gradient(circle, rgba(0,229,255,0.3) 1px, transparent 1px)`, backgroundSize: '32px 32px' }} />
 
-            <header className="relative z-10 border-b border-white/10 bg-[#0B1C2C]/80 backdrop-blur-xl px-6 h-20 flex items-center gap-4">
-                <button onClick={() => navigate('/dashboard')} className="text-gray-400 hover:text-[#00E5FF] transition-colors"><ChevronRight className="w-5 h-5 rotate-180" /></button>
-                <div className="flex items-center gap-2"><HelpCircle className="w-6 h-6 text-[#00E5FF]" /><h1 className="text-xl font-bold">Help & FAQ</h1></div>
-            </header>
+            {isPatient ? (
+                <>
+                    <PatientNavbar currentPath="/help" />
+                    <div className="pt-24 relative z-10 border-b border-white/10 bg-[#0B1C2C]/50 backdrop-blur-xl px-6 py-4">
+                        <div className="max-w-2xl mx-auto flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-[#00E5FF]/10 border border-[#00E5FF]/20 flex items-center justify-center">
+                                    <HelpCircle className="w-5 h-5 text-[#00E5FF]" />
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-bold text-white">Help & FAQ</h1>
+                                    <p className="text-xs text-gray-400">Common questions & platform guides</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            ) : (
+                <header className="relative z-10 border-b border-white/10 bg-[#0B1C2C]/80 backdrop-blur-xl px-6 h-20 flex items-center gap-4">
+                    <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-[#00E5FF] transition-colors"><ChevronRight className="w-5 h-5 rotate-180" /></button>
+                    <div className="flex items-center gap-2"><HelpCircle className="w-6 h-6 text-[#00E5FF]" /><h1 className="text-xl font-bold">Help & FAQ</h1></div>
+                </header>
+            )}
 
             <main className="relative z-10 max-w-2xl mx-auto px-4 py-12">
                 {/* Hero */}

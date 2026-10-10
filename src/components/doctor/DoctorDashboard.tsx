@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
-    ShieldCheck, LogOut, User, CheckCircle, Clock, Stethoscope,
-    Bell, LayoutDashboard, Users, Activity, History, MessageSquare,
-    Settings, ZoomIn, Send, ChevronRight, ActivitySquare, BrainCircuit, BarChart2
+    LogOut, User, CheckCircle, Clock, Stethoscope,
+    Bell, Users, MessageSquare,
+    Settings, ZoomIn, Send, ChevronRight, ActivitySquare, BrainCircuit
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import ConsultationChat from '../common/ConsultationChat';
+import DoctorSidebar from './DoctorSidebar';
 
 interface Consultation {
     id: number | string;
@@ -30,7 +31,6 @@ interface Consultation {
 
 const DoctorDashboard = () => {
     const navigate = useNavigate();
-    const location = useLocation();
     const [consultations, setConsultations] = useState<Consultation[]>([]);
     const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [selectedConsultation, setSelectedConsultation] = useState<Consultation | null>(null);
@@ -46,16 +46,30 @@ const DoctorDashboard = () => {
             const token = localStorage.getItem('token');
             const storedUser = localStorage.getItem('user');
             if (!token || !storedUser) {
-                navigate('/login');
+                navigate('/login/doctor', { replace: true });
                 return;
             }
-            const parsedUser = JSON.parse(storedUser);
-            if (parsedUser.role !== 'doctor') {
-                navigate('/dashboard');
-                return;
+            try {
+                const parsedUser = JSON.parse(storedUser);
+                if (parsedUser.role === 'admin') {
+                    navigate('/admin/dashboard', { replace: true });
+                    return;
+                }
+                if (parsedUser.role === 'patient') {
+                    navigate('/dashboard', { replace: true });
+                    return;
+                }
+                if (parsedUser.role !== 'doctor') {
+                    navigate('/login/doctor', { replace: true });
+                    return;
+                }
+                setUser(parsedUser);
+                fetchConsultations();
+            } catch {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                navigate('/login/doctor', { replace: true });
             }
-            setUser(parsedUser);
-            fetchConsultations();
         };
         checkAuth();
 
@@ -162,40 +176,8 @@ const DoctorDashboard = () => {
                 style={{ backgroundImage: `linear-gradient(rgba(0,229,255,0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.2) 1px, transparent 1px)`, backgroundSize: '40px 40px' }}
             />
 
-            {/* Fixed Left Sidebar */}
-            <aside className="w-20 lg:w-64 bg-[#0a1622]/90 backdrop-blur-xl border-r border-[#00E5FF]/10 flex flex-col items-center lg:items-start py-6 z-20 shrink-0 transition-all duration-300">
-                <div className="flex items-center gap-3 px-4 lg:px-6 mb-12">
-                    <motion.div animate={{ scale: [1, 1.05, 1] }} transition={{ repeat: Infinity, duration: 2 }} className="relative">
-                        <div className="absolute inset-0 bg-[#00E5FF] blur-[10px] opacity-40 rounded-full" />
-                        <BrainCircuit className="w-10 h-10 text-[#00E5FF] relative z-10" />
-                    </motion.div>
-                    <span className="hidden lg:block text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#00E5FF] to-blue-400">
-                        DermaScan AI
-                    </span>
-                </div>
-
-                {/* Fix: Analytics added, active state driven by current route (not hardcoded booleans) */}
-                <div className="w-full flex-1 space-y-2 px-3">
-                    {[
-                        { icon: LayoutDashboard, label: 'Dashboard',            path: '/doctor-dashboard' },
-                        { icon: Users,           label: 'Patient Requests',     path: '/doctor-dashboard' },
-                        { icon: Activity,        label: 'AI Scan Results',      path: '/doctor/scans' },
-                        { icon: History,         label: 'Consultation History', path: '/doctor/history' },
-                        { icon: MessageSquare,   label: 'Messages',             path: '/doctor/messages' },
-                        { icon: BarChart2,       label: 'Analytics',            path: '/doctor/analytics' },
-                        { icon: Settings,        label: 'Settings',             path: '/doctor/settings' },
-                    ].map((item, i) => {
-                        const isActive = location.pathname === item.path;
-                        return (
-                            <button key={i} onClick={() => navigate(item.path)} className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group relative overflow-hidden ${isActive ? 'bg-[#00E5FF]/10 border border-[#00E5FF]/30 text-[#00E5FF] shadow-[0_0_15px_rgba(0,229,255,0.15)]' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
-                                {isActive && <div className="absolute inset-y-0 left-0 w-1 bg-[#00E5FF] shadow-[0_0_10px_#00E5FF]" />}
-                                <item.icon className={`w-5 h-5 ${isActive ? 'text-[#00E5FF]' : 'group-hover:text-[#00E5FF] transition-colors'}`} />
-                                <span className="hidden lg:block font-medium">{item.label}</span>
-                            </button>
-                        );
-                    })}
-                </div>
-            </aside>
+            {/* Doctor Sidebar */}
+            <DoctorSidebar activeItem="dashboard" />
 
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col h-full overflow-hidden relative z-10">
@@ -242,7 +224,7 @@ const DoctorDashboard = () => {
                                             <p className="text-xs text-[#00E5FF] mt-0.5">{user?.email}</p>
                                         </div>
                                         <div className="p-2 space-y-1">
-                                            <button onClick={() => navigate('/profile')} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">
+                                            <button onClick={() => navigate('/doctor/settings')} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">
                                                 <User className="w-4 h-4 group-hover:text-[#00E5FF] transition-colors" /> View Profile
                                             </button>
                                             <button onClick={() => navigate('/notifications')} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-[#00E5FF]/15 hover:shadow-[inset_0_0_10px_rgba(0,229,255,0.2)] rounded-lg flex items-center gap-3 transition-all group">

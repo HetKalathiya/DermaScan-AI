@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { bookAppointment, getMyAppointments, cancelAppointment } = require('../controllers/consultation.controller');
-const { protect } = require('../middlewares/auth.middleware');
+const { getAvailableSlots, bookAppointment, getMyAppointments, cancelAppointment } = require('../controllers/consultation.controller');
+const { protect, requireVerified } = require('../middlewares/auth.middleware');
 
-router.post('/', protect, bookAppointment);
+router.get('/slots/:doctorId', protect, getAvailableSlots);
+router.post('/', protect, requireVerified, bookAppointment);
 router.get('/', protect, getMyAppointments);
 router.delete('/:id', protect, cancelAppointment);
 

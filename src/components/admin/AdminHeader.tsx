@@ -15,7 +15,12 @@ const AdminHeader: React.FC<AdminHeaderProps> = ({ title, subtitle, icon }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const stored = localStorage.getItem('user');
-  const user = stored ? JSON.parse(stored) : null;
+  let user: any = null;
+  try {
+    user = stored ? JSON.parse(stored) : null;
+  } catch {
+    user = null;
+  }
   const initials = user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) : 'AD';
 
   // Close on outside click
@@ -50,6 +55,9 @@ const AdminHeader: React.FC<AdminHeaderProps> = ({ title, subtitle, icon }) => {
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setShowMenu(!showMenu)}
+            aria-haspopup="true"
+            aria-expanded={showMenu}
+            aria-label="Admin profile menu"
             className="flex items-center gap-2.5 p-1 pl-1 pr-3 rounded-full border border-white/10 hover:border-[#00E5FF]/40 bg-[#0a1622] transition-colors"
           >
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-xs font-bold text-black">

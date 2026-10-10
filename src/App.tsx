@@ -9,6 +9,8 @@ import DoctorLogin from './components/common/DoctorLogin';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import Register from './components/common/Register';
 import DoctorRegister from './components/doctor/DoctorRegister';
+import VerifyOtp from './components/common/VerifyOtp';
+import ForgotPassword from './components/common/ForgotPassword';
 import Dashboard from './components/Dashboard';
 import DoctorDashboard from './components/doctor/DoctorDashboard';
 import Profile from './components/common/Profile';
@@ -26,6 +28,9 @@ import MessagesInbox from './components/doctor/MessagesInbox';
 import DoctorSettings from './components/doctor/DoctorSettings';
 import PatientDetail from './components/doctor/PatientDetail';
 import DoctorLanding from './components/doctor/DoctorLanding';
+import DoctorScheduleManager from './components/doctor/DoctorScheduleManager';
+import DoctorPendingApproval from './components/doctor/DoctorPendingApproval';
+import DoctorVerifyOtp from './components/doctor/DoctorVerifyOtp';
 
 // Admin imports
 import AdminLogin from './components/admin/AdminLogin';
@@ -57,18 +62,25 @@ function App() {
           <Route path="/login/doctor" element={<DoctorLogin />} />
           <Route path="/register" element={<Register />} />
           <Route path="/register-doctor" element={<DoctorRegister />} />
+          <Route path="/verify-otp" element={<VerifyOtp />} />
+          <Route path="/doctor/verify-otp" element={<DoctorVerifyOtp />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/doctor/pending-approval" element={<DoctorPendingApproval />} />
 
           {/* Protected patient routes */}
           <Route path="/dashboard" element={<ProtectedRoute role="patient"><Dashboard /></ProtectedRoute>} />
           <Route path="/scan-history" element={<ProtectedRoute role="patient"><ScanHistory role="patient" /></ProtectedRoute>} />
           <Route path="/my-reports" element={<ProtectedRoute role="patient"><MyReports /></ProtectedRoute>} />
-          <Route path="/notifications" element={<ProtectedRoute role="patient"><Notifications /></ProtectedRoute>} />
+          <Route path="/notifications" element={<ProtectedRoute role={['patient', 'doctor']}><Notifications /></ProtectedRoute>} />
           <Route path="/appointments" element={<ProtectedRoute role="patient"><Appointments /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute role="patient"><Settings /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute role="patient"><Profile /></ProtectedRoute>} />
+          <Route path="/my-profile" element={<ProtectedRoute role="patient"><Profile /></ProtectedRoute>} />
+          <Route path="/patient/profile" element={<ProtectedRoute role="patient"><Profile /></ProtectedRoute>} />
 
           {/* Protected doctor routes */}
           <Route path="/doctor-dashboard" element={<ProtectedRoute role="doctor"><DoctorDashboard /></ProtectedRoute>} />
+          <Route path="/doctor/schedule" element={<ProtectedRoute role="doctor"><DoctorScheduleManager /></ProtectedRoute>} />
           <Route path="/doctor/scans" element={<ProtectedRoute role="doctor"><ScanHistory role="doctor" /></ProtectedRoute>} />
           <Route path="/doctor/analytics" element={<ProtectedRoute role="doctor"><Analytics /></ProtectedRoute>} />
           <Route path="/doctor/history" element={<ProtectedRoute role="doctor"><ConsultationHistory /></ProtectedRoute>} />

@@ -223,8 +223,26 @@ app.get('/api/doctor/consultations', verifyToken, async (req, res) => {
 // Get consultations for patient (history)
 app.get('/api/user/consultations', verifyToken, async (req, res) => {
     try {
-        const consultations = await Consultation.find({ patient_id: req.userId }).sort({ created_at: -1 });
-        const mapped = consultations.map(c => c.toJSON());
+        const consultations = await Consultation.find({ patient_id: req.userId })
+            .populate({
+                path: 'doctor_id',
+                populate: { path: 'user_id', select: 'name email' }
+            })
+            .populate('claimed_by', 'name email')
+            .sort({ created_at: -1 });
+
+        const mapped = consultations.map(c => {
+            const doc = c.toJSON();
+            let doctorName = null;
+            if (c.doctor_id && typeof c.doctor_id === 'object') {
+                doctorName = c.doctor_id.user_id?.name || c.doctor_id.name;
+            }
+            if (!doctorName && c.claimed_by && typeof c.claimed_by === 'object') {
+                doctorName = c.claimed_by.name || c.claimed_by.user_id?.name;
+            }
+            doc.doctor_name = doctorName || 'Dermatologist';
+            return doc;
+        });
         res.status(200).json(mapped);
     } catch (err) {
         res.status(500).json({ error: 'Error fetching history' });

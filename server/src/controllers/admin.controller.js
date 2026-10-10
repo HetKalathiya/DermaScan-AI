@@ -34,7 +34,7 @@ exports.setupAdmin = async (req, res) => {
     }
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
-    const admin = await User.create({ name, email, password_hash, role: 'admin' });
+    const admin = await User.create({ name, email, password_hash, role: 'admin', is_verified: true });
     await logActivity('user', `Admin account created for ${name} (${email})`);
     res.json({ success: true, message: 'Admin account created. You can now log in.', admin: { name: admin.name, email: admin.email } });
   } catch (err) {

@@ -5,6 +5,11 @@ interface AdminProtectedRouteProps {
   children: React.ReactNode;
 }
 
+/**
+ * AdminProtectedRoute guards admin-only routes by validating:
+ * 1. An active session token exists in localStorage
+ * 2. The logged-in user's role is 'admin'
+ */
 const AdminProtectedRoute: React.FC<AdminProtectedRouteProps> = ({ children }) => {
   const token = localStorage.getItem('token');
   const stored = localStorage.getItem('user');
@@ -16,9 +21,11 @@ const AdminProtectedRoute: React.FC<AdminProtectedRouteProps> = ({ children }) =
   let isAdmin = false;
   try {
     const user = JSON.parse(stored);
-    isAdmin = user && user.role === 'admin';
+    isAdmin = Boolean(user && user.role === 'admin');
   } catch {
-    isAdmin = false;
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    return <Navigate to="/admin/login" replace />;
   }
 
   if (!isAdmin) {

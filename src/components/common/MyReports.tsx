@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-    FileText, ShieldCheck, 
-    Calendar, User, Bell, LogOut,
-    Activity, Settings, Stethoscope, Download, Loader2, HelpCircle
+import {
+    FileText,
+    Calendar,
+    Stethoscope,
+    Download,
+    Loader2
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import ReportPDFTemplate from './ReportPDFTemplate';
+import PatientNavbar from './PatientNavbar';
 
 interface Report {
     id: string;
@@ -25,22 +28,9 @@ const MyReports = () => {
     const navigate = useNavigate();
     const [reports, setReports] = useState<Report[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [user, setUser] = useState<{ id: string, name: string, email: string, role?: string } | null>(null);
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const templateRefs = useRef<Record<string, HTMLDivElement | null>>({});
-    const profileMenuRef = useRef<HTMLDivElement>(null);
-
-    // Close profile menu on outside click
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
-                setShowProfileMenu(false);
-            }
-        };
-        if (showProfileMenu) document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [showProfileMenu]);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -62,7 +52,7 @@ const MyReports = () => {
                     'Authorization': `Bearer ${token}`
                 }
             });
-            
+
             if (response.ok) {
                 const data = await response.json();
                 // Filter only completed reports
@@ -149,119 +139,16 @@ const MyReports = () => {
         return { diagnosis, treatment, followup };
     };
 
-    const menuLinks = [
-        { icon: User,        label: 'My Profile',     path: '/profile' },
-        { icon: Activity,    label: 'My Scan History', path: '/scan-history' },
-        { icon: FileText,    label: 'My Reports',      path: '/my-reports' },
-        { icon: Settings,    label: 'Settings',        path: '/settings' },
-        { icon: HelpCircle,  label: 'Help & Support',  path: '/help' },
-    ];
-
     return (
         <div className="min-h-screen bg-[#0F172A] text-white selection:bg-[#06B6D4]/30 overflow-x-hidden font-sans relative">
-            
+
             <div className="fixed inset-0 pointer-events-none z-0">
                 <div className="absolute top-[-20%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-[#06B6D4] blur-[200px] mix-blend-screen opacity-10 animate-[pulse_10s_ease-in-out_infinite]" />
                 <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-[#3B82F6] blur-[200px] mix-blend-screen opacity-10 animate-[pulse_12s_ease-in-out_infinite_alternate]" />
             </div>
 
-            <nav className="fixed top-0 left-0 right-0 z-[100] bg-[#0A101C]/80 backdrop-blur-xl border-b border-white/[0.05] h-20 flex items-center justify-between px-6 lg:px-10">
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/dashboard')}>
-                    <div className="relative flex items-center justify-center">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#06B6D4] to-[#3B82F6] flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.3)] relative overflow-hidden z-10 transition-transform hover:scale-105">
-                            <div className="absolute inset-0 bg-white/20"></div>
-                            <ShieldCheck className="w-6 h-6 text-white relative z-10" />
-                        </div>
-                    </div>
-                    <span className="text-2xl font-extrabold tracking-tight hidden sm:block" style={{ fontFamily: "'Syne', sans-serif" }}>
-                        DermaScan <span className="text-[#06B6D4]">AI</span>
-                    </span>
-                </div>
-
-                <div className="flex items-center gap-6">
-                    {/* Bell — wired to notifications page */}
-                    <button
-                        onClick={() => navigate('/notifications')}
-                        className="relative text-slate-400 hover:text-[#06B6D4] transition-colors group"
-                    >
-                        <Bell className="w-6 h-6 group-hover:scale-110 transition-transform" />
-                        <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-[#06B6D4] rounded-full shadow-[0_0_8px_#06B6D4] animate-pulse" />
-                    </button>
-
-                    {/* Profile menu — now has full user info header + Help & Support */}
-                    <div className="relative" ref={profileMenuRef}>
-                        <div
-                            onClick={() => setShowProfileMenu(!showProfileMenu)}
-                            className="relative w-[38px] h-[38px] rounded-full cursor-pointer group flex items-center justify-center transition-transform hover:scale-105"
-                        >
-                            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-[#06B6D4] to-[#3B82F6] p-[2px] animate-[spin_4s_linear_infinite] group-hover:shadow-[0_0_15px_rgba(6,182,212,0.6)]">
-                                <div className="w-full h-full bg-[#0F172A] rounded-full" />
-                            </div>
-                            <span className="relative z-10 text-white text-[13px] font-bold tracking-wider" style={{ fontFamily: "'Syne', sans-serif" }}>
-                                {user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() : 'ME'}
-                            </span>
-                        </div>
-
-                        <AnimatePresence>
-                            {showProfileMenu && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: -10, scale: 0.97 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: -10, scale: 0.97 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="absolute right-0 mt-3 w-[260px] rounded-[16px] overflow-hidden z-[9999]"
-                                    style={{
-                                        backgroundColor: 'rgba(13, 21, 40, 0.95)',
-                                        backdropFilter: 'blur(20px)',
-                                        boxShadow: '0 0 20px rgba(6,182,212,0.1), 0 10px 40px rgba(0,0,0,0.5)',
-                                        border: '1px solid rgba(6,182,212,0.2)'
-                                    }}
-                                >
-                                    {/* User info header — matches ScanHistory/Notifications style */}
-                                    <div className="px-4 py-4 bg-gradient-to-br from-[#06B6D4]/10 to-transparent border-b border-white/10">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#06B6D4] to-[#3B82F6] flex items-center justify-center text-sm font-bold text-white shrink-0">
-                                                {user?.name ? user.name.charAt(0).toUpperCase() : 'M'}
-                                            </div>
-                                            <div className="min-w-0">
-                                                <p className="font-bold text-white text-sm truncate">{user?.name || 'Patient'}</p>
-                                                <p className="text-xs text-[#06B6D4]/80 truncate">{user?.email || ''}</p>
-                                                <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-[#06B6D4]/15 text-[#06B6D4] border border-[#06B6D4]/30">Patient</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-1.5 mt-2.5">
-                                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                                            <span className="text-xs text-emerald-400 font-medium">Online</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="p-2 space-y-0.5" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                                        {menuLinks.map((item, idx) => (
-                                            <button
-                                                key={idx}
-                                                onClick={() => { navigate(item.path); setShowProfileMenu(false); }}
-                                                className={`w-full relative flex items-center justify-between px-3 py-2.5 rounded-lg group transition-all duration-300 ${item.path === '/my-reports' ? 'bg-[#06B6D4]/10' : 'hover:bg-[#06B6D4]/10'}`}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <item.icon className={`w-4 h-4 transition-colors ${item.path === '/my-reports' ? 'text-[#06B6D4]' : 'text-slate-400 group-hover:text-[#06B6D4]'}`} />
-                                                    <span className={`text-sm font-medium transition-colors ${item.path === '/my-reports' ? 'text-white' : 'text-slate-300 group-hover:text-white'}`}>{item.label}</span>
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="h-px w-full bg-white/[0.06]" />
-                                    <div className="p-2">
-                                        <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-all duration-300 hover:bg-[#ef4444]/10">
-                                            <LogOut className="w-4 h-4 text-[#ef4444]" />
-                                            <span className="text-sm font-medium text-[#ef4444]">Sign Out</span>
-                                        </button>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
-                </div>
-            </nav>
+            {/* UNIFIED PATIENT PORTAL NAVBAR */}
+            <PatientNavbar currentPath="/my-reports" />
 
             <main className="pt-32 pb-20 px-4 md:px-8 max-w-7xl mx-auto relative z-10">
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-12">
@@ -284,7 +171,7 @@ const MyReports = () => {
                         {reports.map((report, index) => {
                             const parsed = parseDiagnosis(report);
                             return (
-                                <motion.div 
+                                <motion.div
                                     key={report.id}
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
@@ -361,7 +248,7 @@ const MyReports = () => {
                             <p className="text-slate-400 mb-8 leading-relaxed" style={{ fontFamily: "'DM Sans', sans-serif" }}>
                                 You don't have any completed medical reports from doctors. Once a dermatologist reviews your consultation request, the final report will appear here.
                             </p>
-                            <button 
+                            <button
                                 onClick={() => navigate('/dermatologists')}
                                 className="px-6 py-3 bg-gradient-to-r from-[#06B6D4] to-[#3B82F6] rounded-xl font-bold text-white shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] transition-all"
                             >

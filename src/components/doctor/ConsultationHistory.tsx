@@ -41,7 +41,8 @@ const ConsultationHistory: React.FC = () => {
     const token = localStorage.getItem('token');
     if (!token || !stored) { navigate('/login'); return; }
     const parsed = JSON.parse(stored);
-    if (parsed.role !== 'doctor') { navigate('/dashboard'); return; }
+    if (parsed.role === 'admin') { navigate('/admin/dashboard', { replace: true }); return; }
+    if (parsed.role !== 'doctor') { navigate('/dashboard', { replace: true }); return; }
     setUser(parsed);
     fetch('http://localhost:5000/api/doctor/consultations', {
       headers: { Authorization: `Bearer ${token}` }

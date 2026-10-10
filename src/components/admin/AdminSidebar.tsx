@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   BrainCircuit, LayoutDashboard, Stethoscope,
@@ -19,7 +19,6 @@ const NAV_ITEMS = [
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({ pendingDoctorCount = 0 }) => {
   const navigate  = useNavigate();
-  const location  = useLocation();
 
   const handleLogout = () => {
     localStorage.clear();
@@ -47,36 +46,39 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ pendingDoctorCount = 0 }) =
 
       {/* Nav Items */}
       <div className="w-full flex-1 space-y-1 px-3">
-        {NAV_ITEMS.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <button
-              key={item.key}
-              onClick={() => navigate(item.path)}
-              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group relative overflow-hidden ${
+        {NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.key}
+            to={item.path}
+            className={({ isActive }) =>
+              `w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group relative overflow-hidden ${
                 isActive
                   ? 'bg-[#00E5FF]/10 border border-[#00E5FF]/30 text-[#00E5FF] shadow-[0_0_15px_rgba(0,229,255,0.12)]'
                   : 'text-gray-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              {isActive && <div className="absolute inset-y-0 left-0 w-1 bg-[#00E5FF] shadow-[0_0_10px_#00E5FF] rounded-r-full" />}
-              <div className="relative">
-                <item.icon className={`w-5 h-5 ${isActive ? 'text-[#00E5FF]' : 'group-hover:text-[#00E5FF] transition-colors'}`} />
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                {isActive && <div className="absolute inset-y-0 left-0 w-1 bg-[#00E5FF] shadow-[0_0_10px_#00E5FF] rounded-r-full" />}
+                <div className="relative">
+                  <item.icon className={`w-5 h-5 ${isActive ? 'text-[#00E5FF]' : 'group-hover:text-[#00E5FF] transition-colors'}`} />
+                  {item.key === 'doctors' && pendingDoctorCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-amber-400 text-black text-[9px] font-bold rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(251,191,36,0.6)]">
+                      {pendingDoctorCount > 9 ? '9+' : pendingDoctorCount}
+                    </span>
+                  )}
+                </div>
+                <span className="hidden lg:block font-medium truncate">{item.label}</span>
                 {item.key === 'doctors' && pendingDoctorCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-amber-400 text-black text-[9px] font-bold rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(251,191,36,0.6)]">
-                    {pendingDoctorCount > 9 ? '9+' : pendingDoctorCount}
+                  <span className="hidden lg:block ml-auto text-[10px] font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-full">
+                    {pendingDoctorCount} pending
                   </span>
                 )}
-              </div>
-              <span className="hidden lg:block font-medium truncate">{item.label}</span>
-              {item.key === 'doctors' && pendingDoctorCount > 0 && (
-                <span className="hidden lg:block ml-auto text-[10px] font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-full">
-                  {pendingDoctorCount} pending
-                </span>
-              )}
-            </button>
-          );
-        })}
+              </>
+            )}
+          </NavLink>
+        ))}
       </div>
 
       {/* Logout */}

@@ -30,12 +30,58 @@ const DoctorLogin = () => {
                     password: formData.password,
                 })
             );
+
+            if (response.data?.requires_2fa) {
+                navigate('/doctor/verify-otp', {
+                    state: {
+                        email: response.data.email || formData.email,
+                        masked_email: response.data.masked_email,
+                        role: 'doctor',
+                        purpose: '2fa',
+                    }
+                });
+                return;
+            }
+
             const { token, user } = response.data;
             localStorage.setItem('token', token);
             localStorage.setItem('user', JSON.stringify(user));
             navigate('/doctor-dashboard');
         } catch (err: any) {
-            setError(err.response?.data?.error || 'Login failed. Please try again.');
+            if (err.response?.data?.requires_2fa) {
+                navigate('/doctor/verify-otp', {
+                    state: {
+                        email: err.response.data.email || formData.email,
+                        masked_email: err.response.data.masked_email,
+                        role: 'doctor',
+                        purpose: '2fa',
+                    }
+                });
+                return;
+            }
+            if (err.response?.data?.requires_verification) {
+                const { email: unverifiedEmail, masked_email, role: userRole } = err.response.data;
+                navigate('/doctor/verify-otp', {
+                    state: {
+                        email: unverifiedEmail || formData.email,
+                        masked_email,
+                        role: userRole || 'doctor',
+                        purpose: 'registration',
+                    }
+                });
+                return;
+            }
+            if (err.response?.data?.requires_approval) {
+                navigate('/doctor/pending-approval', {
+                    state: {
+                        email: formData.email,
+                        doctor: err.response.data.doctor,
+                        message: err.response.data.message,
+                    }
+                });
+                return;
+            }
+            setError(err.response?.data?.error || err.response?.data?.message || 'Login failed. Please try again.');
             setIsLoading(false);
         }
     };
@@ -232,9 +278,9 @@ const DoctorLogin = () => {
                                     </div>
                                     <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Remember me</span>
                                 </label>
-                                <a href="#" className="text-sm font-semibold text-[#818CF8] hover:text-white transition-colors underline decoration-[#818CF8]/30 underline-offset-4 hover:decoration-white">
+                                <Link to="/forgot-password" className="text-sm font-semibold text-[#818CF8] hover:text-white transition-colors underline decoration-[#818CF8]/30 underline-offset-4 hover:decoration-white">
                                     Forgot password?
-                                </a>
+                                </Link>
                             </div>
 
                             {/* Submit */}

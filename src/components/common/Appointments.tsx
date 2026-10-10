@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Clock, ChevronRight, User, Stethoscope, Building2, XCircle, CheckCircle, FileText, AlertTriangle } from 'lucide-react';
+import { Calendar, Clock, ChevronRight, User, Stethoscope, Building2, XCircle, CheckCircle, FileText, AlertTriangle, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReviewModal from './ReviewModal';
+import PatientNavbar from './PatientNavbar';
 
 interface Appointment {
     _id: string;
     id?: string;
+    doctor_id?: any;
+    claimed_by?: any;
     image_data?: string;
     status: 'pending_appointment' | 'active' | 'completed' | 'cancelled';
     appointment_date?: string;
     appointment_time?: string;
+    doctor_name?: string;
     message?: string;
     doctor_specialization?: string;
     doctor_hospital?: string;
@@ -34,6 +39,7 @@ const Appointments: React.FC = () => {
     const [cancelId, setCancelId] = useState<string | null>(null);
     const [isCancelling, setIsCancelling] = useState(false);
     const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [reviewTarget, setReviewTarget] = useState<{ consultationId: string; doctorId: string } | null>(null);
 
     useEffect(() => {
         if (!localStorage.getItem('user')) { navigate('/login'); return; }
@@ -107,15 +113,27 @@ const Appointments: React.FC = () => {
                 )}
             </AnimatePresence>
 
-            <header className="relative z-10 border-b border-white/10 bg-[#0B1C2C]/80 backdrop-blur-xl px-6 h-20 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <button onClick={() => navigate('/dashboard')} className="text-gray-400 hover:text-[#00E5FF] transition-colors"><ChevronRight className="w-5 h-5 rotate-180" /></button>
-                    <div className="flex items-center gap-2"><Calendar className="w-6 h-6 text-[#00E5FF]" /><h1 className="text-xl font-bold">My Appointments</h1></div>
-                </div>
-                <button onClick={() => navigate('/dermatologists')} className="px-4 py-2 bg-[#00E5FF]/10 border border-[#00E5FF]/30 text-[#00E5FF] rounded-xl text-sm font-bold hover:bg-[#00E5FF]/20 transition-all">+ Book New</button>
-            </header>
+            {/* UNIFIED PATIENT PORTAL NAVBAR */}
+            <PatientNavbar currentPath="/appointments" />
 
-            <main className="relative z-10 max-w-3xl mx-auto px-4 py-8">
+            <div className="pt-24 relative z-10 border-b border-white/10 bg-[#0B1C2C]/50 backdrop-blur-xl px-6 py-4">
+                <div className="max-w-4xl mx-auto flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-[#00E5FF]/10 border border-[#00E5FF]/20 flex items-center justify-center">
+                            <Calendar className="w-5 h-5 text-[#00E5FF]" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold text-white">My Appointments</h1>
+                            <p className="text-xs text-gray-400">Manage consultations and upcoming doctor visits</p>
+                        </div>
+                    </div>
+                    <button onClick={() => navigate('/dermatologists')} className="px-4 py-2.5 bg-[#00E5FF]/15 border border-[#00E5FF]/30 text-[#00E5FF] rounded-xl text-sm font-bold hover:bg-[#00E5FF]/25 hover:border-[#00E5FF]/50 transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(0,229,255,0.15)]">
+                        + Book New
+                    </button>
+                </div>
+            </div>
+
+            <main className="relative z-10 max-w-4xl mx-auto px-4 py-8">
                 <div className="flex gap-2 mb-6 flex-wrap">
                     {['All', 'Upcoming', 'Completed', 'Cancelled'].map(tab => (
                         <button key={tab} onClick={() => setFilter(tab)}
@@ -151,15 +169,25 @@ const Appointments: React.FC = () => {
                                         <div className="flex-1 space-y-1.5">
                                             <div className="flex items-start justify-between gap-2 flex-wrap">
                                                 <div>
-                                                    <div className="flex items-center gap-2"><Stethoscope className="w-4 h-4 text-[#00E5FF]" /><span className="font-semibold text-sm">{appt.doctor_specialization || 'Dermatologist'}</span></div>
+                                                    <div className="flex items-center gap-2"><Stethoscope className="w-4 h-4 text-[#00E5FF]" /><span className="font-semibold text-sm">{appt.doctor_name && appt.doctor_name !== 'Dermatologist' ? `${appt.doctor_name} (${appt.doctor_specialization || 'Dermatologist'})` : (appt.doctor_specialization || 'Dermatologist')}</span></div>
                                                     <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5"><Building2 className="w-3 h-3" />{appt.doctor_hospital || 'Clinic'}</div>
                                                 </div>
                                                 <span className={`px-3 py-1 rounded-full text-xs font-bold border ${cfg.bg} ${cfg.color} ${cfg.border}`}>{cfg.label}</span>
                                             </div>
                                             {(appt.appointment_date || appt.appointment_time) && (
-                                                <div className="flex gap-3 text-xs text-gray-400">
-                                                    {appt.appointment_date && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(appt.appointment_date).toLocaleDateString()}</span>}
-                                                    {appt.appointment_time && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{appt.appointment_time}</span>}
+                                                <div className="flex items-center gap-2 text-xs text-gray-400 flex-wrap pt-1">
+                                                    {appt.appointment_date && (
+                                                        <span className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg text-slate-300">
+                                                            <Calendar className="w-3.5 h-3.5 text-[#00E5FF]" />
+                                                            {appt.appointment_date}
+                                                        </span>
+                                                    )}
+                                                    {appt.appointment_time && (
+                                                        <span className="flex items-center gap-1.5 bg-[#00E5FF]/10 border border-[#00E5FF]/30 text-[#00E5FF] font-bold px-2.5 py-1 rounded-lg">
+                                                            <Clock className="w-3.5 h-3.5" />
+                                                            {appt.appointment_time}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )}
                                             {appt.message && <p className="text-xs text-gray-400 bg-white/5 rounded-lg px-3 py-2 border border-white/5">"{appt.message}"</p>}
@@ -173,8 +201,28 @@ const Appointments: React.FC = () => {
                                             {appt.follow_up && <p className="text-xs text-[#00E5FF] font-semibold">Follow-up: {appt.follow_up}</p>}
                                         </div>
                                     )}
-                                    <div className="px-5 pb-4 flex gap-2">
-                                        {appt.status === 'completed' && <button onClick={() => navigate('/my-reports')} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/20"><FileText className="w-3 h-3" />View Report</button>}
+                                    <div className="px-5 pb-4 flex gap-2 flex-wrap">
+                                        {appt.status === 'completed' && (
+                                            <>
+                                                <button onClick={() => navigate('/my-reports')} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg text-xs font-bold hover:bg-green-500/20"><FileText className="w-3 h-3" />View Report</button>
+                                                <button
+                                                    onClick={() => {
+                                                        const docId = typeof appt.doctor_id === 'object' && appt.doctor_id?._id
+                                                            ? appt.doctor_id._id
+                                                            : (typeof appt.doctor_id === 'string' && appt.doctor_id
+                                                                ? appt.doctor_id
+                                                                : (typeof appt.claimed_by === 'object' && appt.claimed_by?._id
+                                                                    ? appt.claimed_by._id
+                                                                    : (typeof appt.claimed_by === 'string' ? appt.claimed_by : '')));
+                                                        setReviewTarget({ consultationId: id, doctorId: docId });
+                                                    }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 rounded-lg text-xs font-bold hover:bg-yellow-500/20 transition-all"
+                                                >
+                                                    <Star className="w-3.5 h-3.5 fill-yellow-400/30 text-yellow-400" />
+                                                    Rate & Review
+                                                </button>
+                                            </>
+                                        )}
                                         {appt.status === 'pending_appointment' && <button onClick={() => setCancelId(id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-xs font-bold hover:bg-red-500/20"><XCircle className="w-3 h-3" />Cancel</button>}
                                     </div>
                                 </motion.div>
@@ -183,6 +231,18 @@ const Appointments: React.FC = () => {
                     </div>
                 )}
             </main>
+
+            {/* Review Modal */}
+            {reviewTarget && (
+                <ReviewModal
+                    consultationId={reviewTarget.consultationId}
+                    doctorId={reviewTarget.doctorId}
+                    onClose={() => setReviewTarget(null)}
+                    onSuccess={() => {
+                        setToast({ type: 'success', text: 'Review submitted successfully!' });
+                    }}
+                />
+            )}
         </div>
     );
 };

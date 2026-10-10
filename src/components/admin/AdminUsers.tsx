@@ -7,6 +7,8 @@ import {
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 interface Patient {
   _id: string;
   name: string;
@@ -38,19 +40,18 @@ const AdminUsers: React.FC = () => {
     userEmail: string;
   } | null>(null);
 
+  const [toast, setToast] = useState('');
+  
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(''), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
+
   const [actionInProgress, setActionInProgress] = useState(false);
   const token = localStorage.getItem('token');
 
-  // Debounce search input
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-      setPage(1);
-    }, 300000); // Wait, 300000ms is 5 mins! Oh, let's make it 300ms so it's snappy but avoids too many requests.
-    return () => clearTimeout(timer);
-  }, [search]);
-
-  // Actually let's use 300ms debounce
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
@@ -69,7 +70,7 @@ const AdminUsers: React.FC = () => {
         filter: filterType,
         search: debouncedSearch
       });
-      const response = await fetch(`http://localhost:5000/api/admin/users?${queryParams.toString()}`, {
+      const response = await fetch(`${API_BASE}/api/admin/users?${queryParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const resData = await response.json();
@@ -101,9 +102,9 @@ const AdminUsers: React.FC = () => {
       let method = 'PATCH';
 
       if (type === 'suspend' || type === 'activate') {
-        url = `http://localhost:5000/api/admin/users/${userId}/suspend`;
+        url = `${API_BASE}/api/admin/users/${userId}/suspend`;
       } else if (type === 'delete') {
-        url = `http://localhost:5000/api/admin/users/${userId}`;
+        url = `${API_BASE}/api/admin/users/${userId}`;
         method = 'DELETE';
       }
 
@@ -120,11 +121,11 @@ const AdminUsers: React.FC = () => {
           fetchUsers();
           setConfirmModal(null);
         } else {
-          alert(resData.message || 'Action failed.');
+          setToast(resData.message || 'Action failed.');
         }
       }
     } catch {
-      alert('Network error. Failed to execute action.');
+      setToast('Network error. Failed to execute action.');
     } finally {
       setActionInProgress(false);
     }
@@ -268,6 +269,7 @@ const AdminUsers: React.FC = () => {
                               })}
                               className="p-1.5 border border-red-500/20 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                               title="Permanently Delete Account"
+                              aria-label="Permanently delete account"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -311,7 +313,7 @@ const AdminUsers: React.FC = () => {
       {/* CONFIRMATION DIALOG MODAL */}
       <AnimatePresence>
         {confirmModal && confirmModal.show && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onKeyDown={(e) => { if (e.key === 'Escape') setConfirmModal(null); }}>
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -380,6 +382,11 @@ const AdminUsers: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+      {toast && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed bottom-6 right-6 z-[200] bg-red-500/90 backdrop-blur-sm text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-2xl border border-red-400/30 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4" />{toast}
+        </motion.div>
+      )}
     </div>
   );
 };
